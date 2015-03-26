@@ -1,0 +1,9 @@
+1. Implement fig 3(a)
+md-5 hash
+Node class - successor
+
+2. Implement fig 5
+Extend successor to finger table
+
+3. Implement fig 6
+include predecessor field in node class
