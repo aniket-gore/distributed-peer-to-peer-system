@@ -3,7 +3,7 @@
 	"protocol":"tcp",
 	"IpAddress":"127.0.0.1",
 	"Port":1234,
-	"persistentStorageContainer":{"file":"/home/atul/UMBC/go/bolt_test.txt"},
-	"Methods":["lookup","insert","insertOrUpdate","delete","listKeys","listIDs","shutdown"]
+	"persistentStorageContainer":{"file":"bolt_test.txt"},
+	"Methods":["lookup","insert","insertOrUpdate","delete","listKeys","listIDs","shutdown"],
 	"ringsize" : 32
 }
