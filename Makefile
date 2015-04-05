@@ -15,7 +15,7 @@ build:
 
 
 server: deps build
-	go install testserver.go
+	go install $(GOPATH)/src/621_proj/testserver.go
 
 format:
 	go fmt $(PACKAGES)
