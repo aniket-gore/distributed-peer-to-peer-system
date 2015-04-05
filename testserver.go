@@ -24,7 +24,7 @@ func main() {
 	}
 	rpcServer.InitializeServerConfig(*configObject)
 
-	rpcServer.InitializeChordNode(*configObject)
+	rpcServer.InitializeChordNode()
 
 	//create the server and listen to incoming connections
 	if err := rpcServer.CreateServer(); err != nil {
