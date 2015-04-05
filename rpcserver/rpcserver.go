@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"621_proj/chord"
 )
 
 type Dict3 struct {
@@ -52,6 +53,9 @@ type ConfigType struct {
 	Port           int                     `json: "port"`
 	PersistentStorageContainer PersistentContainerType `json: "persistentStorageContainer"`
 	Methods        []string                `json: "methods"`
+
+	//additional config fields for chord implemetation
+	RingSize       int                      `json: "RingSize"`      
 }
 
 //this struct object will manage the server
@@ -63,6 +67,10 @@ type RPCServer struct {
 	wgLock       *sync.Mutex
 	logger       *log.Logger
 	logFile      os.File
+	
+	//additional fields for chord implementation
+	
+	chordNode  *(chord.ChordNode)
 }
 
 //this struct methods will be exposed to client
@@ -887,3 +895,15 @@ func (rpcServer *RPCServer) CreateServer() error {
 }
 
 /*****************************Server Helper Routines Ends**********************************************/
+/*****************************Chord related functions**************************************************/
+
+func (rpcServer *RPCServer) InitializeChordNode(inputConfigObject ConfigType) {
+
+	rpcServer.chordNode = &chord.ChordNode{}
+	rpcServer.chordNode.InitializeNode(rpcServer.configObject.RingSize)
+	
+}
+
+
+
+/*****************************Chord related functions**************************************************/
