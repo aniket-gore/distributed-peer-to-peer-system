@@ -70,35 +70,41 @@ func (chordNode * ChordNode) join(serverInfo ServerInfo){
 	
 	//create the connection
 	//number of simultaneous channels should be taken from config file
-	numChannels := 10
+
 	network := serverInfo.Protocol
 	address := serverInfo.IpAddress + ":" + strconv.Itoa(serverInfo.Port)
 	serverName := serverInfo.ServerID
 	client := &rpcclient.RPCClient{}
 	
 	//create new client
-	if err :=client.NewClient(network,address,numChannels); err!=nil{
+	if err :=client.NewClient(network,address); err!=nil{
 		fmt.Println(err)
 		return
 		
 	} 
-	jsonMessages := make([]string,0,10)
+
 	
-	jsonMessages = append(jsonMessages, "{\"method\":\"findSuccessor\",\"params\":["+ fmt.Sprint(chordNode.id) +"]}")
-	fmt.Println(jsonMessages[0])
+	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":["+ fmt.Sprint(chordNode.id) +"]}"
+	fmt.Println(jsonMessage)
 	
-	numMessages :=len(jsonMessages)
+
 	//make asychronous calls
-	if err := client.CreateAsyncRPC(jsonMessages[0:], serverName); err!=nil{
+	if err := client.CreateAsyncRPC(jsonMessage, serverName); err!=nil{
 		fmt.Println(err)
 		return
 	}
 	
 	//process replies from server
-	if err := client.ProcessReplies(numMessages); err!=nil{
+	var err error
+	var response rpcclient.ResponseParameters
+	if err,response = client.ProcessReply(); err!=nil{
 		fmt.Println(err)
 		return
 	}
+	
+	//test
+	fmt.Println(response)
+	//test
 
 }
 

@@ -75,7 +75,8 @@ type RPCClient struct {
 }
 
 //RPCClient creator
-func (client *RPCClient) NewClient(network string, address string, numChannels int) error {
+func (client *RPCClient) NewClient(network string, address string) error {
+	numChannels := 10
 	conn, err := jsonrpc.Dial(network, address)
 	client.connection = conn
 	if err != nil {
@@ -115,82 +116,82 @@ func extractMethodName(byteRequest []byte, rpcFunction *string) error {
 }
 
 //create Asynchronous RPC calls
-func (client *RPCClient) CreateAsyncRPC(jsonMessages []string, serverName string) error {
+func (client *RPCClient) CreateAsyncRPC(jsonMessage string, serverName string) error {
 	var byteRequest []byte
 
 	//directly send jsonmessages to the server asynchronously
 	var rpcFunction string
-	for _, request := range jsonMessages {
 
-		byteRequest = []byte(request)
+	byteRequest = []byte(jsonMessage)
 
-		var reqPar RequestParameters
-		/*
+	var reqPar RequestParameters
+	/*
 		   Method string `json:"Method"`
 		   Params json.RawMessage `json: "params"`
 		   Id int 'json" "id"'
 		*/
-		//fmt.Println("Request: ",request)
-		if err := json.Unmarshal(byteRequest, &reqPar); err != nil {
-			customError := errors.New("Message request unmarshalling error:" + err.Error())
-			fmt.Println(customError)
-			//return customError
-			continue
+	//fmt.Println("Request: ",request)
+	if err := json.Unmarshal(byteRequest, &reqPar); err != nil {
+		customError := errors.New("Message request unmarshalling error:" + err.Error())
+		fmt.Println(customError)
+		return customError
 
-		}
-
-		//fmt.Println("Request",reqPar)
-		if err := extractMethodName(byteRequest, &rpcFunction); err != nil {
-			fmt.Println(err)
-			//return err
-			continue
-		}
-		rpcServerAndFunction := serverName + "." + rpcFunction
-		
-
-		//encoder := json.NewEncoder(os.Stdout)
-		//encoder.Encode(reqPar)
-		var response interface{}
-	
-		if rpcFunction=="Insert"{
-			response = new(ResponseParametersInsert)	
-		}else{
-			response = new(ResponseParameters)	
-		}
-		client.connection.Go(rpcServerAndFunction, reqPar, response, client.doneChan)
 
 	}
+
+	//fmt.Println("Request",reqPar)
+	if err := extractMethodName(byteRequest, &rpcFunction); err != nil {
+		fmt.Println(err)
+		return err
+
+	}
+	rpcServerAndFunction := serverName + "." + rpcFunction
+	
+
+	//encoder := json.NewEncoder(os.Stdout)
+	//encoder.Encode(reqPar)
+	var response interface{}
+	
+	if rpcFunction=="Insert"{
+		response = new(ResponseParametersInsert)	
+	}else{
+		response = new(ResponseParameters)	
+	}
+	client.connection.Go(rpcServerAndFunction, reqPar, response, client.doneChan)
+
+	
 	return nil
 
 }
 
 //process calls by reading the channel of Calls
-func (client *RPCClient) ProcessReplies(numRequests int) error {
+func (client *RPCClient) ProcessReply() (error,ResponseParameters) {
 
+	rp :=ResponseParameters{}
 	//should take timeout as config argument
 	var timeout <-chan time.Time
 	timeout = time.After(10000 * time.Millisecond)
-	for i := 0; i < (numRequests); i++ {
-		select {
+	select {
 		//case when channel has got a call object
-		case replyCall := <-client.doneChan:
-
-			if replyCall.Error != nil {
-				fmt.Println(replyCall.Error)
-				continue
-				//return replyCall.Error
-			}
-			//fmt.Println("reply:", *(replyCall.Reply).(*ResponseParameters))
-			encoder := json.NewEncoder(os.Stdout)
-			encoder.Encode(replyCall.Reply)
-			//initialize timout
-			timeout = time.After(10000 * time.Millisecond)
-		case <-timeout:
-			fmt.Println("Timed Out")
+	case replyCall := <-client.doneChan:
+		
+		if replyCall.Error != nil {
+			fmt.Println(replyCall.Error)
+			return replyCall.Error,ResponseParameters{} 
 			
 		}
-
+		rp = *(replyCall.Reply).(*ResponseParameters)
+		//fmt.Println("reply:", *(replyCall.Reply).(*ResponseParameters))
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.Encode(replyCall.Reply)
+		//initialize timout
+		timeout = time.After(10000 * time.Millisecond)
+	case <-timeout:
+		fmt.Println("Timed Out")
+		
 	}
 
-	return nil
+
+
+	return nil,rp
 }
