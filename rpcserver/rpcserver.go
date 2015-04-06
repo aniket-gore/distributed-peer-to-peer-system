@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"sync"
 	"621_proj/rpcclient"
+	"math"
 )
 
 type Dict3 struct {
@@ -934,8 +935,18 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 		} 
 	}
 	
-	if inputId <= rpcMethod.rpcServer.chordNode.Id {
-		succId = rpcMethod.rpcServer.chordNode.Id
+	
+	/*
+          if (id ∈ (n, successor])
+             return successor;
+        */
+	if inputId > rpcMethod.rpcServer.chordNode.Id && inputId<=rpcMethod.rpcServer.chordNode.Successor {
+		succId = rpcMethod.rpcServer.chordNode.Successor
+
+		//successor id is less than node id - check whether inputId falls between (n,sucessor + 2^m) 
+	}else if rpcMethod.rpcServer.chordNode.Successor < rpcMethod.rpcServer.chordNode.Id && inputId > rpcMethod.rpcServer.chordNode.Id && inputId<=(rpcMethod.rpcServer.chordNode.Successor+ uint32(math.Pow(2,float64(rpcMethod.rpcServer.chordNode.MValue)))) {
+		succId = rpcMethod.rpcServer.chordNode.Successor
+	
 	}else{
 		interId = rpcMethod.rpcServer.chordNode.ClosestPrecedingNode(inputId)
 		

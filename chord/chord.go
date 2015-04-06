@@ -21,8 +21,8 @@ type ChordNode struct {
 	FirstNode    int
 	//unexposed
 	Id          uint32
-	predecessor uint32
-	successor   uint32
+	Predecessor uint32
+	Successor   uint32
 
 	//key = index in finger table and  value = chord ID
 	fingerTable []uint32
@@ -38,13 +38,13 @@ func (chordNode *ChordNode) InitializeNode() {
 	//initialize predecessor and successor to own ID
 	chordNode.Id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
 
-	chordNode.predecessor = chordNode.Id
-	chordNode.successor = chordNode.Id
+	chordNode.Predecessor = chordNode.Id
+	chordNode.Successor = chordNode.Id
 
 	if chordNode.FirstNode != 1 {
 		chordNode.join(getDefaultServerInfo())
 	} else {
-		chordNode.successor = chordNode.Id
+		chordNode.Successor = chordNode.Id
 	}
 }
 
@@ -79,6 +79,8 @@ func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 	//test
 	fmt.Println(response)
 	//test
+	chordNode.Predecessor = 0
+	chordNode.Successor = (response.Result[0]).(uint32)
 
 }
 
@@ -101,7 +103,8 @@ also checking from down is not right
 func (chordNode ChordNode)ClosestPrecedingNode(inputId uint32) uint32 {
 	
 	for i:=chordNode.MValue;i>0;i--{
-		if chordNode.fingerTable[i]<inputId && chordNode.fingerTable[i]!=0{
+		//finger[i] ∈ (n, id)
+		if chordNode.fingerTable[i]>chordNode.Id && chordNode.fingerTable[i]<inputId  && chordNode.fingerTable[i]!=0{
 			return chordNode.fingerTable[i]
 		}
 	}
