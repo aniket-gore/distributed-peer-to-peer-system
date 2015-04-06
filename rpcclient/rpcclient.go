@@ -8,8 +8,17 @@ import (
 	"net/rpc"
 	"net/rpc/jsonrpc"
 	"os"
+	"strconv"
 	"time"
 )
+
+type ServerInfo struct {
+	ServerID  string `json:"serverID"`
+	Protocol  string `json:"protocol"`
+	IpAddress string `json: "ipAddress"`
+	Port      int    `json: "port"`
+	//ChordID   int      `json: "chordID"`
+}
 
 //structure for parsing Response from server
 
@@ -30,8 +39,8 @@ type RequestParameters struct {
 //to manage inserts
 type ResponseParametersInsert struct {
 	Result interface{} `json:"result"`
-	Id     int           `json: "id,omitempty"`
-	Error  interface{}   `json:"error"`
+	Id     int         `json: "id,omitempty"`
+	Error  interface{} `json:"error"`
 }
 
 //structure for parsing config file
@@ -104,13 +113,13 @@ func extractMethodName(byteRequest []byte, rpcFunction *string) error {
 
 	}
 	//check if it ins in the list of methd names
-	firstLetter :=  reqPar.Method[0]
-	if firstLetter>=97 && firstLetter <=122{
+	firstLetter := reqPar.Method[0]
+	if firstLetter >= 97 && firstLetter <= 122 {
 		(*rpcFunction) = string(reqPar.Method[0]-'a'+65) + reqPar.Method[1:]
-	}else{
+	} else {
 		(*rpcFunction) = reqPar.Method
 	}
-	
+
 	return nil
 
 }
@@ -126,16 +135,15 @@ func (client *RPCClient) CreateAsyncRPC(jsonMessage string, serverName string) e
 
 	var reqPar RequestParameters
 	/*
-		   Method string `json:"Method"`
-		   Params json.RawMessage `json: "params"`
-		   Id int 'json" "id"'
-		*/
+	   Method string `json:"Method"`
+	   Params json.RawMessage `json: "params"`
+	   Id int 'json" "id"'
+	*/
 	//fmt.Println("Request: ",request)
 	if err := json.Unmarshal(byteRequest, &reqPar); err != nil {
 		customError := errors.New("Message request unmarshalling error:" + err.Error())
 		fmt.Println(customError)
 		return customError
-
 
 	}
 
@@ -146,39 +154,37 @@ func (client *RPCClient) CreateAsyncRPC(jsonMessage string, serverName string) e
 
 	}
 	rpcServerAndFunction := serverName + "." + rpcFunction
-	
 
 	//encoder := json.NewEncoder(os.Stdout)
 	//encoder.Encode(reqPar)
 	var response interface{}
-	
-	if rpcFunction=="Insert"{
-		response = new(ResponseParametersInsert)	
-	}else{
-		response = new(ResponseParameters)	
+
+	if rpcFunction == "Insert" {
+		response = new(ResponseParametersInsert)
+	} else {
+		response = new(ResponseParameters)
 	}
 	client.connection.Go(rpcServerAndFunction, reqPar, response, client.doneChan)
 
-	
 	return nil
 
 }
 
 //process calls by reading the channel of Calls
-func (client *RPCClient) ProcessReply() (error,ResponseParameters) {
+func (client *RPCClient) ProcessReply() (error, ResponseParameters) {
 
-	rp :=ResponseParameters{}
+	rp := ResponseParameters{}
 	//should take timeout as config argument
 	var timeout <-chan time.Time
 	timeout = time.After(10000 * time.Millisecond)
 	select {
-		//case when channel has got a call object
+	//case when channel has got a call object
 	case replyCall := <-client.doneChan:
-		
+
 		if replyCall.Error != nil {
 			fmt.Println(replyCall.Error)
-			return replyCall.Error,ResponseParameters{} 
-			
+			return replyCall.Error, ResponseParameters{}
+
 		}
 		rp = *(replyCall.Reply).(*ResponseParameters)
 		//fmt.Println("reply:", *(replyCall.Reply).(*ResponseParameters))
@@ -188,10 +194,37 @@ func (client *RPCClient) ProcessReply() (error,ResponseParameters) {
 		timeout = time.After(10000 * time.Millisecond)
 	case <-timeout:
 		fmt.Println("Timed Out")
-		
+
 	}
 
+	return nil, rp
+}
 
+func (client *RPCClient) RpcCall(serverInfo ServerInfo, requestMessage string) (error, ResponseParameters) {
 
-	return nil,rp
+	network := serverInfo.Protocol
+	address := serverInfo.IpAddress + ":" + strconv.Itoa(serverInfo.Port)
+	serverName := serverInfo.ServerID
+
+	response := ResponseParameters{}
+	//create new client
+	if err := client.NewClient(network, address); err != nil {
+		fmt.Println(err)
+		return err, response
+	}
+
+	//make asychronous calls
+	if err := client.CreateAsyncRPC(requestMessage, serverName); err != nil {
+		fmt.Println(err)
+		return err, response
+	}
+
+	//process replies from server
+	var err error
+	if err, response = client.ProcessReply(); err != nil {
+		fmt.Println(err)
+		return err, response
+	}
+
+	return nil, response
 }
