@@ -4,13 +4,14 @@ import (
 	"621_proj/rpcclient"
 	"fmt"
 	"hash/fnv"
+	"math"
 )
 
-type ServerInfo struct{
-	ServerID  string   `json:"serverID"`
-	Protocol  string   `json:"protocol"`
-	IpAddress string   `json: "ipAddress"`
-	Port      int      `json: "port"`
+type ServerInfo struct {
+	ServerID  string `json:"serverID"`
+	Protocol  string `json:"protocol"`
+	IpAddress string `json: "ipAddress"`
+	Port      int    `json: "port"`
 }
 
 type ChordNode struct {
@@ -100,14 +101,43 @@ no mod used
 also checking from down is not right
 */
 
-func (chordNode ChordNode)ClosestPrecedingNode(inputId uint32) uint32 {
-	
-	for i:=chordNode.MValue;i>0;i--{
+func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
+
+	for i := chordNode.MValue; i > 0; i-- {
 		//finger[i] ∈ (n, id)
-		if chordNode.fingerTable[i]>chordNode.Id && chordNode.fingerTable[i]<inputId  && chordNode.fingerTable[i]!=0{
+		if chordNode.fingerTable[i] > chordNode.Id && chordNode.fingerTable[i] < inputId && chordNode.fingerTable[i] != 0 {
 			return chordNode.fingerTable[i]
 		}
 	}
-	
+
 	return 0
+}
+
+// initially fingerTableIndex = 0
+func (chordNode *ChordNode) FixFingers(serverInfo ServerInfo, fingerTableIndex int) {
+	//check every entry in the finger table one after another
+	fingerTableIndex += 1
+	if fingerTableIndex > chordNode.MValue {
+		fingerTableIndex = 1
+	}
+
+	//find the successor of (p+2^(i-1)) by RPC call to the default server
+	nextNodeId := chordNode.Id + uint32(math.Pow(2, float64(fingerTableIndex-1)))
+	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(nextNodeId) + "]}"
+
+	clientServerInfo := rpcclient.ServerInfo{}
+	clientServerInfo.ServerID = serverInfo.ServerID
+	clientServerInfo.Protocol = serverInfo.Protocol
+	clientServerInfo.IpAddress = serverInfo.IpAddress
+	clientServerInfo.Port = serverInfo.Port
+
+	client := &rpcclient.RPCClient{}
+	err, response := client.RpcCall(clientServerInfo, jsonMessage)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	chordNode.fingerTable[fingerTableIndex] = (response.Result[0]).(uint32)
 }
