@@ -47,7 +47,7 @@ func (chordNode * ChordNode) InitializeNode(){
 
 	chordNode.predecessor = chordNode.id
 	chordNode.successor = chordNode.id
-	
+
 	if chordNode.FirstNode != 1{
 		chordNode.join(getDefaultServerInfo())
 	}else{
@@ -84,7 +84,7 @@ func (chordNode * ChordNode) join(serverInfo ServerInfo){
 	} 
 	jsonMessages := make([]string,0,10)
 	
-	jsonMessages = append(jsonMessages, "{\"method\":\"findSuccessor\",\"params\":["+ string(chordNode.id) +"]}")
+	jsonMessages = append(jsonMessages, "{\"method\":\"findSuccessor\",\"params\":["+ fmt.Sprint(chordNode.id) +"]}")
 	fmt.Println(jsonMessages[0])
 	
 	numMessages :=len(jsonMessages)

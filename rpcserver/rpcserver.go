@@ -898,7 +898,8 @@ func (rpcServer *RPCServer) InitializeChordNode() {
 
 	rpcServer.chordNode = &chord.ChordNode{}	
 	rpcServer.chordNode.MValue  = rpcServer.configObject.MValue
-	
+	rpcServer.chordNode.FirstNode  = rpcServer.configObject.FirstNode
+
 
 	rpcServer.chordNode.MyServerInfo.ServerID = rpcServer.configObject.ServerID
 	rpcServer.chordNode.MyServerInfo.Protocol = rpcServer.configObject.Protocol

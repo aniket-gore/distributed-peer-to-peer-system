@@ -1,3 +1,3 @@
-log: 2015/04/05 21:40:46 In createserver
-log: 2015/04/05 21:40:46 server1
-log: 2015/04/05 21:40:46 tcp :1235
+log: 2015/04/05 22:44:35 In createserver
+log: 2015/04/05 22:44:35 server1
+log: 2015/04/05 22:44:35 tcp :1235
