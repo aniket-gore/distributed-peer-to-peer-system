@@ -901,7 +901,7 @@ func (rpcServer *RPCServer) CreateServer() error {
 func (rpcServer *RPCServer) InitializeChordNode() {
 
 	rpcServer.chordNode = &chord.ChordNode{}
-	
+	rpcServer.chordNode.FirstNode  = rpcServer.configObject.FirstNode
 	rpcServer.chordNode.MValue  = rpcServer.configObject.MValue
 	
 
