@@ -6,12 +6,11 @@ import (
 	"hash/fnv"
 )
 
-type ServerInfo struct {
-	ServerID  string `json:"serverID"`
-	Protocol  string `json:"protocol"`
-	IpAddress string `json: "ipAddress"`
-	Port      int    `json: "port"`
-	//ChordID   int      `json: "chordID"`
+type ServerInfo struct{
+	ServerID  string   `json:"serverID"`
+	Protocol  string   `json:"protocol"`
+	IpAddress string   `json: "ipAddress"`
+	Port      int      `json: "port"`
 }
 
 type ChordNode struct {
@@ -21,14 +20,14 @@ type ChordNode struct {
 	MValue       int
 	FirstNode    int
 	//unexposed
-	id          uint32
+	Id          uint32
 	predecessor uint32
 	successor   uint32
 
 	//key = index in finger table and  value = chord ID
 	fingerTable []uint32
 	//map another chord ID to their actual server info
-	ftServerMapping map[uint32]ServerInfo
+	FtServerMapping map[uint32]ServerInfo
 }
 
 func (chordNode *ChordNode) InitializeNode() {
@@ -37,15 +36,15 @@ func (chordNode *ChordNode) InitializeNode() {
 	chordNode.fingerTable = make([]uint32, int(chordNode.MValue)+1)
 
 	//initialize predecessor and successor to own ID
-	chordNode.id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
+	chordNode.Id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
 
-	chordNode.predecessor = chordNode.id
-	chordNode.successor = chordNode.id
+	chordNode.predecessor = chordNode.Id
+	chordNode.successor = chordNode.Id
 
 	if chordNode.FirstNode != 1 {
 		chordNode.join(getDefaultServerInfo())
 	} else {
-		chordNode.successor = chordNode.id
+		chordNode.successor = chordNode.Id
 	}
 }
 
@@ -60,7 +59,7 @@ func getDefaultServerInfo() ServerInfo {
 
 func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 
-	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(chordNode.id) + "]}"
+	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(chordNode.Id) + "]}"
 	fmt.Println(jsonMessage)
 
 	clientServerInfo := rpcclient.ServerInfo{}
@@ -91,4 +90,21 @@ func calculateHash(stringValue string) uint32 {
 	hasher := fnv.New32()
 	hasher.Write([]byte(stringValue))
 	return hasher.Sum32()
+}
+
+/*
+Wrongly done - Will be fixed by aniket
+no mod used
+also checking from down is not right
+*/
+
+func (chordNode ChordNode)ClosestPrecedingNode(inputId uint32) uint32 {
+	
+	for i:=chordNode.MValue;i>0;i--{
+		if chordNode.fingerTable[i]<inputId && chordNode.fingerTable[i]!=0{
+			return chordNode.fingerTable[i]
+		}
+	}
+	
+	return 0
 }

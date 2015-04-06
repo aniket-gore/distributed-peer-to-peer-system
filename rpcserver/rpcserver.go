@@ -14,6 +14,7 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"621_proj/rpcclient"
 )
 
 type Dict3 struct {
@@ -910,8 +911,63 @@ func (rpcServer *RPCServer) InitializeChordNode() {
 	
 }
 
+/*
+request <-"{"method":"findSuccessor","params":[22]}"
+response <- "{"result":[23],"id":,"error":null }"
+*/
+
 func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
 	fmt.Println(jsonInput)
+	
+	
+	var inputId uint32
+	var succId uint32
+	var interId uint32
+	var parameters []interface{}
+	parameters = jsonInput.Params
+
+	//get inputId from the []interface
+	for k, v := range parameters {
+		rpcMethod.rpcServer.logger.Println(k, v)
+		if k == 0 {
+			inputId = v.(uint32)
+		} 
+	}
+	
+	if inputId <= rpcMethod.rpcServer.chordNode.Id {
+		succId = rpcMethod.rpcServer.chordNode.Id
+	}else{
+		interId = rpcMethod.rpcServer.chordNode.ClosestPrecedingNode(inputId)
+		
+		//if interId == 0 what to do?
+
+		
+		//create rpc call "{"method":"findSuccessor","params":[interid]}"
+		jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(interId) + "]}"
+		fmt.Println(jsonMessage)
+
+		clientServerInfo := rpcclient.ServerInfo{}
+		clientServerInfo.ServerID = rpcMethod.rpcServer.chordNode.FtServerMapping[interId].ServerID
+		clientServerInfo.Protocol = rpcMethod.rpcServer.chordNode.FtServerMapping[interId].Protocol
+		clientServerInfo.IpAddress = rpcMethod.rpcServer.chordNode.FtServerMapping[interId].IpAddress
+		clientServerInfo.Port = rpcMethod.rpcServer.chordNode.FtServerMapping[interId].Port
+		
+		client := &rpcclient.RPCClient{}
+		err, response := client.RpcCall(clientServerInfo, jsonMessage)
+		
+		if err != nil {
+			fmt.Println(err)
+			return nil
+		}
+		
+		succId = response.Result[0].(uint32)
+		fmt.Println(succId)
+		
+	}
+
+	jsonOutput.Result = make([]interface{}, 1)
+	jsonOutput.Result[0] = succId 	
+	
 	return nil
 }
 
