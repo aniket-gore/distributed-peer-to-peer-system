@@ -1,6 +1,7 @@
 package rpcserver
 
 import (
+	"621_proj/chord"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"os"
 	"strconv"
 	"sync"
-	"621_proj/chord"
 )
 
 type Dict3 struct {
@@ -34,11 +34,10 @@ type ResponseParameters struct {
 	Error  interface{}   `json:"error"`
 }
 
-
 type ResponseParametersInsert struct {
 	Result interface{} `json:"result"`
-	Id     int           `json: "id,omitempty"`
-	Error  interface{}   `json:"error"`
+	Id     int         `json: "id,omitempty"`
+	Error  interface{} `json:"error"`
 }
 
 //can be a file or a database
@@ -47,12 +46,12 @@ type PersistentContainerType struct {
 }
 
 type ConfigType struct {
-	ServerID       string                  `json:"serverID"`
-	Protocol       string                  `json:"protocol"`
-	IpAddress      string                  `json: "ipAddress"`
-	Port           int                     `json: "port"`
+	ServerID                   string                  `json:"serverID"`
+	Protocol                   string                  `json:"protocol"`
+	IpAddress                  string                  `json: "ipAddress"`
+	Port                       int                     `json: "port"`
 	PersistentStorageContainer PersistentContainerType `json: "persistentStorageContainer"`
-	Methods        []string                `json: "methods"`
+	Methods                    []string                `json: "methods"`
 
 	//additional config fields for chord implemetation
 	MValue       int                      `json: "mvalue"`      
@@ -68,10 +67,10 @@ type RPCServer struct {
 	wgLock       *sync.Mutex
 	logger       *log.Logger
 	logFile      os.File
-	
+
 	//additional fields for chord implementation
-	
-	chordNode  *(chord.ChordNode)
+
+	chordNode *(chord.ChordNode)
 }
 
 //this struct methods will be exposed to client
@@ -559,7 +558,7 @@ func (rpcMethod *RPCMethod) Delete(jsonInput RequestParameters, jsonOutput *Resp
 		response.Result = nil
 		response.Error = 1
 	}
-	
+
 	//no response
 	response = nil
 
@@ -609,7 +608,7 @@ func (rpcMethod *RPCMethod) Shutdown(jsonInput RequestParameters, jsonOutput *Re
 		response.Error = 1
 
 	}
-	
+
 	//no response
 	response = nil
 
@@ -791,10 +790,8 @@ func (rpcServer *RPCServer) routineDone() {
 
 func (rpcServer *RPCServer) InitializeServerConfig(inputConfigObject ConfigType) error {
 
-
 	//initialize config
 	rpcServer.configObject = inputConfigObject
-
 
 	//initialize channel
 	//sender gets blocked gets
@@ -852,7 +849,6 @@ func (rpcServer *RPCServer) CreateServer() error {
 
 	}
 
-
 	rpcServer.logger.Println(rpcServer.configObject.Protocol, ":"+strconv.Itoa(rpcServer.configObject.Port))
 	tcpAddr, err := net.ResolveTCPAddr(rpcServer.configObject.Protocol, ":"+strconv.Itoa(rpcServer.configObject.Port))
 	if err != nil {
@@ -900,8 +896,7 @@ func (rpcServer *RPCServer) CreateServer() error {
 
 func (rpcServer *RPCServer) InitializeChordNode() {
 
-	rpcServer.chordNode = &chord.ChordNode{}
-	
+	rpcServer.chordNode = &chord.ChordNode{}	
 	rpcServer.chordNode.MValue  = rpcServer.configObject.MValue
 	
 
@@ -918,7 +913,5 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 	fmt.Println(jsonInput)
 	return nil
 }
-
-
 
 /*****************************Chord related functions**************************************************/

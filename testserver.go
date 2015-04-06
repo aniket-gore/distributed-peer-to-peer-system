@@ -1,34 +1,32 @@
 package main
 
-import(
+import (
+	"621_proj/rpcserver"
 	"fmt"
 	"os"
-	"621_proj/rpcserver"
 )
-func main(){
+
+func main() {
 
 	//read the config file
 	configFilePath := os.Args[1]
 	configObject := &rpcserver.ConfigType{}
-	if err:=configObject.ReadConfig(configFilePath);err!=nil{
+	if err := configObject.ReadConfig(configFilePath); err != nil {
 		return
 	}
 	//Initialize server with the config object
 	var rpcServer *(rpcserver.RPCServer)
 	var err error
-	err,rpcServer = rpcserver.GetRPCServerInstance()
-	if err!=nil{
+	err, rpcServer = rpcserver.GetRPCServerInstance()
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
 	rpcServer.InitializeServerConfig(*configObject)
 	rpcServer.InitializeChordNode()
-	
+
 	//create the server and listen to incoming connections
-	if err:=rpcServer.CreateServer();err!=nil{
+	if err := rpcServer.CreateServer(); err != nil {
 		return
 	}
-	
-	
-	
 }

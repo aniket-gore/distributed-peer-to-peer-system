@@ -1,6 +1,7 @@
 package chord
 
 import( 
+	"hash/fnv"
 	"621_proj/rpcclient"
 	"strconv"
 	"fmt"
@@ -42,7 +43,8 @@ func (chordNode * ChordNode) InitializeNode(){
 	chordNode.fingerTable = make([]uint32,int(chordNode.MValue) + 1)
 	
 	//initialize predecessor and successor to own ID
-	
+	chordNode.id = getID(chordNode.myServerInfo.IpAddress,chordNode.myServerInfo.Port)
+
 	chordNode.predecessor = chordNode.id
 	chordNode.successor = chordNode.id
 	
@@ -99,40 +101,14 @@ func (chordNode * ChordNode) join(serverInfo ServerInfo){
 	}
 
 }
-/*
-// ask node n to find the successor of id
-n.find successor(id)
-if (id ∈ (n, successor])
-return successor;
-else
-n = closest preceding node(id );
-return n .find successor(id);
 
 
-// search the local table for the highest predecessor of id
-n.closest preceding node(id)
-for i = m downto 1
-if (finger[i] ∈ (n, id))
-return finger[i];
-return n;
-*/
-
-/*
-func (chordNode  ChordNode) findSuccessor(inputId int){
-	if inputId<=chordNode.id {
-		return id
-	}
-	else{
-		searchedId = closestPrecedingNode(inputId)
-	}
-
-	//rpc call to searchedId
-	
+func getID(ipAddress string, port int) uint32 {
+	return calculateHash(ipAddress + "_" + string(port))
 }
 
-func (chordNode  ChordNode) closestPrecedingNode(inputID int){
-	for i:=chordNode.ringSize;i>=0;i--{
-		if chordNode.fingerTable[i]< 
-	}
+func calculateHash(stringValue string) uint32 {
+	hasher := fnv.New32()
+	hasher.Write([]byte(stringValue))
+	return hasher.Sum32()
 }
-*/
