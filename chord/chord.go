@@ -43,7 +43,7 @@ func (chordNode * ChordNode) InitializeNode(){
 	chordNode.fingerTable = make([]uint32,int(chordNode.MValue) + 1)
 	
 	//initialize predecessor and successor to own ID
-	chordNode.id = getID(chordNode.myServerInfo.IpAddress,chordNode.myServerInfo.Port)
+	chordNode.id = getID(chordNode.MyServerInfo.IpAddress,chordNode.MyServerInfo.Port)
 
 	chordNode.predecessor = chordNode.id
 	chordNode.successor = chordNode.id
@@ -84,7 +84,7 @@ func (chordNode * ChordNode) join(serverInfo ServerInfo){
 	} 
 	jsonMessages := make([]string,0,10)
 	
-	jsonMessages = append(jsonMessages, "{\"method\":\"findSuccessor\",\"params\":[22]}")
+	jsonMessages = append(jsonMessages, "{\"method\":\"findSuccessor\",\"params\":["+ string(chordNode.id) +"]}")
 	fmt.Println(jsonMessages[0])
 	
 	numMessages :=len(jsonMessages)
