@@ -95,12 +95,6 @@ func calculateHash(stringValue string) uint32 {
 	return hasher.Sum32()
 }
 
-/*
-Wrongly done - Will be fixed by aniket
-no mod used
-also checking from down is not right
-*/
-
 func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
 
 	for i := chordNode.MValue; i > 0; i-- {
@@ -121,15 +115,15 @@ func (chordNode *ChordNode) FixFingers(serverInfo ServerInfo, fingerTableIndex i
 		fingerTableIndex = 1
 	}
 
-	//find the successor of (p+2^(i-1)) by RPC call to the default server
+	//find the successor of (p+2^(i-1)) by initiaing the find_successor call from the current node
 	nextNodeId := chordNode.Id + uint32(math.Pow(2, float64(fingerTableIndex-1)))
 	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(nextNodeId) + "]}"
 
 	clientServerInfo := rpcclient.ServerInfo{}
-	clientServerInfo.ServerID = serverInfo.ServerID
-	clientServerInfo.Protocol = serverInfo.Protocol
-	clientServerInfo.IpAddress = serverInfo.IpAddress
-	clientServerInfo.Port = serverInfo.Port
+	clientServerInfo.ServerID = chordNode.MyServerInfo.ServerID
+	clientServerInfo.Protocol = chordNode.MyServerInfo.Protocol
+	clientServerInfo.IpAddress = chordNode.MyServerInfo.IpAddress
+	clientServerInfo.Port = chordNode.MyServerInfo.Port
 
 	client := &rpcclient.RPCClient{}
 	err, response := client.RpcCall(clientServerInfo, jsonMessage)
