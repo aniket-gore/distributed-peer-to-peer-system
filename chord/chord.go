@@ -49,8 +49,7 @@ func (chordNode *ChordNode) InitializeNode() {
 	//initialize predecessor and successor to own ID
 	chordNode.Id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
 
-	chordNode.Predecessor = chordNode.Id
-	chordNode.Successor = chordNode.Id
+	chordNode.isPredecessorNil = true
 
 	if chordNode.FirstNode != 1 {
 		chordNode.join(getDefaultServerInfo())
