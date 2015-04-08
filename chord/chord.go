@@ -25,10 +25,20 @@ type ChordNode struct {
 	Predecessor uint32
 	Successor   uint32
 
+	isPredecessorNil bool
+
 	//key = index in finger table and  value = chord ID
 	fingerTable []uint32
 	//map another chord ID to their actual server info
 	FtServerMapping map[uint32]ServerInfo
+}
+
+func (chordNode *ChordNode) GetPredecessor() (bool, uint32) {
+	if chordNode.isPredecessorNil {
+		return true, 0
+	} else {
+		return false, chordNode.Predecessor
+	}
 }
 
 func (chordNode *ChordNode) InitializeNode() {
@@ -134,4 +144,52 @@ func (chordNode *ChordNode) FixFingers(serverInfo ServerInfo, fingerTableIndex i
 	}
 
 	chordNode.fingerTable[fingerTableIndex] = (response.Result[0]).(uint32)
+}
+
+func (chordNode *ChordNode) Stabilize() {
+	//RPC call to get predecessor of successor
+	jsonMessage := "{\"method\":\"GetPredecessor\",\"params\":[]}"
+
+	clientServerInfo := rpcclient.ServerInfo{}
+	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.fingerTable[0]].ServerID
+	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.fingerTable[0]].Protocol
+	clientServerInfo.IpAddress = chordNode.FtServerMapping[chordNode.fingerTable[0]].IpAddress
+	clientServerInfo.Port = chordNode.FtServerMapping[chordNode.fingerTable[0]].Port
+
+	client := &rpcclient.RPCClient{}
+	err, response := client.RpcCall(clientServerInfo, jsonMessage)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	isPredecessorOfSuccessorNil := (response.Result[0]).(bool)
+	predecessorOfSuccessor := (response.Result[1]).(uint32)
+
+	//update the successor
+	if !isPredecessorOfSuccessorNil {
+		isPredecessorNil, predecessor := chordNode.GetPredecessor()
+		//predecessor == chordNode.Id refers to the case where the ActualNodesInRing = 1 i.e. predecessor is the node itself
+		if (predecessorOfSuccessor > chordNode.Id && predecessorOfSuccessor < chordNode.Successor) || (!isPredecessorNil && predecessor == chordNode.Id) {
+			chordNode.Successor = predecessorOfSuccessor
+		}
+	}
+
+	//RPC call to notify the successor about the predecessor(i.e. current node)
+	jsonMessage = "{\"method\":\"Notify\",\"params\":[" + fmt.Sprint(chordNode.Id) + "]}"
+
+	clientServerInfo = rpcclient.ServerInfo{}
+	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.fingerTable[0]].ServerID
+	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.fingerTable[0]].Protocol
+	clientServerInfo.IpAddress = chordNode.FtServerMapping[chordNode.fingerTable[0]].IpAddress
+	clientServerInfo.Port = chordNode.FtServerMapping[chordNode.fingerTable[0]].Port
+
+	client = &rpcclient.RPCClient{}
+	err, _ = client.RpcCall(clientServerInfo, jsonMessage)
+
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 }

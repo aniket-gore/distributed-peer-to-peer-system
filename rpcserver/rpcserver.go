@@ -2,20 +2,20 @@ package rpcserver
 
 import (
 	"621_proj/chord"
+	"621_proj/rpcclient"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/boltdb/bolt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"net/rpc"
 	"net/rpc/jsonrpc"
 	"os"
 	"strconv"
 	"sync"
-	"621_proj/rpcclient"
-	"math"
 )
 
 type Dict3 struct {
@@ -56,8 +56,8 @@ type ConfigType struct {
 	Methods                    []string                `json: "methods"`
 
 	//additional config fields for chord implemetation
-	MValue       int                      `json: "mvalue"`      
-	FirstNode    int                      `json: "firstnode"`
+	MValue    int `json: "mvalue"`
+	FirstNode int `json: "firstnode"`
 }
 
 //this struct object will manage the server
@@ -898,10 +898,9 @@ func (rpcServer *RPCServer) CreateServer() error {
 
 func (rpcServer *RPCServer) InitializeChordNode() {
 
-	rpcServer.chordNode = &chord.ChordNode{}	
-	rpcServer.chordNode.MValue  = rpcServer.configObject.MValue
-	rpcServer.chordNode.FirstNode  = rpcServer.configObject.FirstNode
-
+	rpcServer.chordNode = &chord.ChordNode{}
+	rpcServer.chordNode.MValue = rpcServer.configObject.MValue
+	rpcServer.chordNode.FirstNode = rpcServer.configObject.FirstNode
 
 	rpcServer.chordNode.MyServerInfo.ServerID = rpcServer.configObject.ServerID
 	rpcServer.chordNode.MyServerInfo.Protocol = rpcServer.configObject.Protocol
@@ -909,7 +908,7 @@ func (rpcServer *RPCServer) InitializeChordNode() {
 	rpcServer.chordNode.MyServerInfo.Port = rpcServer.configObject.Port
 
 	rpcServer.chordNode.InitializeNode()
-	
+
 }
 
 /*
@@ -919,8 +918,7 @@ response <- "{"result":[23],"id":,"error":null }"
 
 func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
 	fmt.Println(jsonInput)
-	
-	
+
 	var inputId uint32
 	var succId uint32
 	var interId uint32
@@ -932,27 +930,25 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 		rpcMethod.rpcServer.logger.Println(k, v)
 		if k == 0 {
 			inputId = v.(uint32)
-		} 
+		}
 	}
-	
-	
+
 	/*
-          if (id ∈ (n, successor])
-             return successor;
-        */
-	if inputId > rpcMethod.rpcServer.chordNode.Id && inputId<=rpcMethod.rpcServer.chordNode.Successor {
+	   if (id ∈ (n, successor])
+	      return successor;
+	*/
+	if inputId > rpcMethod.rpcServer.chordNode.Id && inputId <= rpcMethod.rpcServer.chordNode.Successor {
 		succId = rpcMethod.rpcServer.chordNode.Successor
 
-		//successor id is less than node id - check whether inputId falls between (n,sucessor + 2^m) 
-	}else if rpcMethod.rpcServer.chordNode.Successor < rpcMethod.rpcServer.chordNode.Id && inputId > rpcMethod.rpcServer.chordNode.Id && inputId<=(rpcMethod.rpcServer.chordNode.Successor+ uint32(math.Pow(2,float64(rpcMethod.rpcServer.chordNode.MValue)))) {
+		//successor id is less than node id - check whether inputId falls between (n,sucessor + 2^m)
+	} else if rpcMethod.rpcServer.chordNode.Successor < rpcMethod.rpcServer.chordNode.Id && inputId > rpcMethod.rpcServer.chordNode.Id && inputId <= (rpcMethod.rpcServer.chordNode.Successor+uint32(math.Pow(2, float64(rpcMethod.rpcServer.chordNode.MValue)))) {
 		succId = rpcMethod.rpcServer.chordNode.Successor
-	
-	}else{
+
+	} else {
 		interId = rpcMethod.rpcServer.chordNode.ClosestPrecedingNode(inputId)
-		
+
 		//if interId == 0 what to do?
 
-		
 		//create rpc call "{"method":"findSuccessor","params":[interid]}"
 		jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(interId) + "]}"
 		fmt.Println(jsonMessage)
@@ -962,23 +958,70 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 		clientServerInfo.Protocol = rpcMethod.rpcServer.chordNode.FtServerMapping[interId].Protocol
 		clientServerInfo.IpAddress = rpcMethod.rpcServer.chordNode.FtServerMapping[interId].IpAddress
 		clientServerInfo.Port = rpcMethod.rpcServer.chordNode.FtServerMapping[interId].Port
-		
+
 		client := &rpcclient.RPCClient{}
 		err, response := client.RpcCall(clientServerInfo, jsonMessage)
-		
+
 		if err != nil {
 			fmt.Println(err)
 			return nil
 		}
-		
+
 		succId = response.Result[0].(uint32)
 		fmt.Println(succId)
-		
+
 	}
 
 	jsonOutput.Result = make([]interface{}, 1)
-	jsonOutput.Result[0] = succId 	
-	
+	jsonOutput.Result[0] = succId
+
+	return nil
+}
+
+/*
+request <-"{"method":"GetPredecessor","params":[]}"
+response <- "{"result":[true,12345678],"id":,"error":null }"
+*/
+
+func (rpcMethod *RPCMethod) GetPredecessor(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+	fmt.Println(jsonInput)
+
+	isPredecessorNil, predecessor := rpcMethod.rpcServer.chordNode.GetPredecessor()
+
+	jsonOutput.Result = make([]interface{}, 2)
+	jsonOutput.Result[0] = isPredecessorNil
+	jsonOutput.Result[1] = predecessor
+
+	return nil
+}
+
+/*
+request <-"{"method":"Notify","params":[10]}"
+response <- "{"result":[],"id":,"error":null }"
+*/
+func (rpcMethod *RPCMethod) Notify(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+
+	var probablePredecessorId uint32
+	var parameters []interface{}
+	parameters = jsonInput.Params
+
+	//get inputId from the []interface
+	for k, v := range parameters {
+		rpcMethod.rpcServer.logger.Println(k, v)
+		if k == 0 {
+			probablePredecessorId = v.(uint32)
+		}
+	}
+
+	//probablePredecessor ∈ (predecessor, chordNode)
+	isPredecessorNil, predecessor := rpcMethod.rpcServer.chordNode.GetPredecessor()
+	//predecessor == chordNode.Id refers to the case where the ActualNodesInRing = 1 i.e. predecessor is the node itself
+	if isPredecessorNil || (probablePredecessorId > predecessor && probablePredecessorId < rpcMethod.rpcServer.chordNode.Id) || predecessor == rpcMethod.rpcServer.chordNode.Id {
+		rpcMethod.rpcServer.chordNode.Predecessor = probablePredecessorId
+	}
+
+	jsonOutput.Result = make([]interface{}, 1)
+
 	return nil
 }
 
