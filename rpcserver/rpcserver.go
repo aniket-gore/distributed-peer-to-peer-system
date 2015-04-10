@@ -908,6 +908,7 @@ func (rpcServer *RPCServer) InitializeChordNode() {
 	rpcServer.chordNode.MyServerInfo.Port = rpcServer.configObject.Port
 
 	rpcServer.chordNode.InitializeNode()
+	rpcServer.chordNode.RunBackgroundProcesses()
 
 }
 

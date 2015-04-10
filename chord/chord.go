@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"math"
+	"time"
 )
 
 type ServerInfo struct {
@@ -117,7 +118,7 @@ func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
 }
 
 // initially fingerTableIndex = 0
-func (chordNode *ChordNode) FixFingers(serverInfo ServerInfo, fingerTableIndex int) {
+func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
 	//check every entry in the finger table one after another
 	fingerTableIndex += 1
 	if fingerTableIndex > chordNode.MValue {
@@ -145,7 +146,7 @@ func (chordNode *ChordNode) FixFingers(serverInfo ServerInfo, fingerTableIndex i
 	chordNode.fingerTable[fingerTableIndex] = (response.Result[0]).(uint32)
 }
 
-func (chordNode *ChordNode) Stabilize() {
+func (chordNode *ChordNode) stabilize() {
 	//RPC call to get predecessor of successor
 	jsonMessage := "{\"method\":\"GetPredecessor\",\"params\":[]}"
 
@@ -191,4 +192,15 @@ func (chordNode *ChordNode) Stabilize() {
 		fmt.Println(err)
 		return
 	}
+}
+
+func (chordNode *ChordNode) RunBackgroundProcesses() {
+	ticker := time.NewTicker(time.Millisecond * 500)
+	go func() {
+		for t := range ticker.C {
+			fmt.Println("Tick at", t)
+			chordNode.fixFingers(0)
+			chordNode.stabilize()
+		}
+	}()
 }
