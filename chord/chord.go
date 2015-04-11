@@ -38,6 +38,20 @@ type ChordNode struct {
 	Logger *log.Logger
 }
 
+func (chordNode *ChordNode) updateFtServerMapping(id uint32, serverInfo ServerInfo) {
+
+	if _, ok := chordNode.FtServerMapping[id]; !ok {
+
+		clientServerInfo := ServerInfo{}
+		clientServerInfo.ServerID = serverInfo.ServerID
+		clientServerInfo.Protocol = serverInfo.Protocol
+		clientServerInfo.IpAddress = serverInfo.IpAddress
+		clientServerInfo.Port = serverInfo.Port
+
+		chordNode.FtServerMapping[id] = clientServerInfo
+	}
+}
+
 func (chordNode *ChordNode) GetPredecessor() (bool, uint32) {
 	if chordNode.isPredecessorNil {
 		return true, 0
@@ -50,6 +64,9 @@ func (chordNode *ChordNode) InitializeNode() {
 	chordNode.Logger.Println("Chord : In Initialize Node")
 	//FT[i] = succ(id + 2^(i-1))   for 1<=i<=m
 	chordNode.fingerTable = make([]uint32, int(chordNode.MValue)+1)
+
+	//create an empty map for server mappings
+	chordNode.FtServerMapping = make(map[uint32]ServerInfo)
 
 	//initialize predecessor and successor to own ID
 	chordNode.Id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
