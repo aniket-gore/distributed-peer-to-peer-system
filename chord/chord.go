@@ -4,9 +4,9 @@ import (
 	"621_proj/rpcclient"
 	"fmt"
 	"hash/fnv"
+	"log"
 	"math"
 	"time"
-	"log"
 )
 
 type ServerInfo struct {
@@ -22,11 +22,11 @@ type ChordNode struct {
 	MyServerInfo ServerInfo
 	MValue       int
 	FirstNode    int
-	
+
 	Id          uint32
 	Predecessor uint32
 	Successor   uint32
-	
+
 	isPredecessorNil bool
 
 	//key = index in finger table and  value = chord ID
@@ -35,8 +35,7 @@ type ChordNode struct {
 	FtServerMapping map[uint32]ServerInfo
 
 	//logger from rpcServer
-	Logger       *log.Logger
-
+	Logger *log.Logger
 }
 
 func (chordNode *ChordNode) GetPredecessor() (bool, uint32) {
@@ -97,7 +96,7 @@ func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 	chordNode.Logger.Println(response)
 	//test
 	chordNode.Predecessor = 0
-	chordNode.Successor =uint32((response.Result[0]).(float64))
+	chordNode.Successor = uint32((response.Result[0]).(float64))
 
 }
 
@@ -127,7 +126,7 @@ func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
 func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
 
 	chordNode.Logger.Println("Chord : In fixFingers")
-	
+
 	//find the successor of (p+2^(i-1)) by initiaing the find_successor call from the current node
 	nextNodeId := chordNode.Id + uint32(math.Pow(2, float64(fingerTableIndex-1)))
 	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(nextNodeId) + "]}"
@@ -149,20 +148,22 @@ func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
 	}
 
 	chordNode.fingerTable[fingerTableIndex] = uint32((response.Result[0]).(float64))
+
+	chordNode.Successor = chordNode.fingerTable[1]
 }
 
 func (chordNode *ChordNode) stabilize() {
-	chordNode.Logger.Println("Chord : In Stabilize")
-	
+	// chordNode.Logger.Println("Chord : In Stabilize")
 
+	chordNode.Logger.Println("In Stabilize()")
 	//RPC call to get predecessor of successor
 	jsonMessage := "{\"method\":\"GetPredecessor\",\"params\":[]}"
 
 	clientServerInfo := rpcclient.ServerInfo{}
-	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.fingerTable[0]].ServerID
-	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.fingerTable[0]].Protocol
-	clientServerInfo.IpAddress = chordNode.FtServerMapping[chordNode.fingerTable[0]].IpAddress
-	clientServerInfo.Port = chordNode.FtServerMapping[chordNode.fingerTable[0]].Port
+	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.fingerTable[1]].ServerID
+	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.fingerTable[1]].Protocol
+	clientServerInfo.IpAddress = chordNode.FtServerMapping[chordNode.fingerTable[1]].IpAddress
+	clientServerInfo.Port = chordNode.FtServerMapping[chordNode.fingerTable[1]].Port
 
 	client := &rpcclient.RPCClient{}
 	err, response := client.RpcCall(clientServerInfo, jsonMessage)
@@ -177,21 +178,25 @@ func (chordNode *ChordNode) stabilize() {
 
 	//update the successor
 	if !isPredecessorOfSuccessorNil {
-		isPredecessorNil, predecessor := chordNode.GetPredecessor()
+		isPredecessorNil, _ := chordNode.GetPredecessor()
 		//predecessor == chordNode.Id refers to the case where the ActualNodesInRing = 1 i.e. predecessor is the node itself
-		if (predecessorOfSuccessor > chordNode.Id && predecessorOfSuccessor < chordNode.Successor) || (!isPredecessorNil && predecessor == chordNode.Id) {
+		if (predecessorOfSuccessor > chordNode.Id && predecessorOfSuccessor < chordNode.Successor) || (!isPredecessorNil && chordNode.Successor == chordNode.Id) {
 			chordNode.Successor = predecessorOfSuccessor
 		}
 	}
+
+	chordNode.Logger.Println("Current Node: " + fmt.Sprint(chordNode.Id))
+	chordNode.Logger.Println("Current Node Successor: " + fmt.Sprint(chordNode.Successor))
+	chordNode.Logger.Println("Current Node Predecessor: " + fmt.Sprint(chordNode.Predecessor))
 
 	//RPC call to notify the successor about the predecessor(i.e. current node)
 	jsonMessage = "{\"method\":\"Notify\",\"params\":[" + fmt.Sprint(chordNode.Id) + "]}"
 
 	clientServerInfo = rpcclient.ServerInfo{}
-	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.fingerTable[0]].ServerID
-	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.fingerTable[0]].Protocol
-	clientServerInfo.IpAddress = chordNode.FtServerMapping[chordNode.fingerTable[0]].IpAddress
-	clientServerInfo.Port = chordNode.FtServerMapping[chordNode.fingerTable[0]].Port
+	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.fingerTable[1]].ServerID
+	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.fingerTable[1]].Protocol
+	clientServerInfo.IpAddress = chordNode.FtServerMapping[chordNode.fingerTable[1]].IpAddress
+	clientServerInfo.Port = chordNode.FtServerMapping[chordNode.fingerTable[1]].Port
 
 	client = &rpcclient.RPCClient{}
 	err, _ = client.RpcCall(clientServerInfo, jsonMessage)
@@ -204,21 +209,19 @@ func (chordNode *ChordNode) stabilize() {
 
 func (chordNode *ChordNode) RunBackgroundProcesses() {
 	chordNode.Logger.Println("Chord : In Run Background Processes Node")
-	fingerTableIndex :=0
+	fingerTableIndex := 0
 	ticker := time.NewTicker(time.Millisecond * 500)
 	go func() {
 		for t := range ticker.C {
 			chordNode.Logger.Println("Tick at", t)
 			chordNode.stabilize()
-			
+
 			//check every entry in the finger table one after another
 			fingerTableIndex += 1
 			if fingerTableIndex > chordNode.MValue {
 				fingerTableIndex = 1
 			}
-
 			chordNode.fixFingers(fingerTableIndex)
-	
 		}
 	}()
 }

@@ -22,13 +22,13 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	
+
 	rpcServer.InitializeServerConfig(*configObject)
 	//create the server and listen to incoming connections
 	if err := rpcServer.CreateServer(); err != nil {
 		return
 	}
 
-	rpcServer.InitializeChordNode()
+	// rpcServer.InitializeChordNode()
 
 }
