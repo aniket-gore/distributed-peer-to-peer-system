@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"math"
 	"time"
+	"log"
 )
 
 type ServerInfo struct {
@@ -21,17 +22,21 @@ type ChordNode struct {
 	MyServerInfo ServerInfo
 	MValue       int
 	FirstNode    int
-	//unexposed
+	
 	Id          uint32
 	Predecessor uint32
 	Successor   uint32
-
+	
 	isPredecessorNil bool
 
 	//key = index in finger table and  value = chord ID
 	fingerTable []uint32
 	//map another chord ID to their actual server info
 	FtServerMapping map[uint32]ServerInfo
+
+	//logger from rpcServer
+	Logger       *log.Logger
+
 }
 
 func (chordNode *ChordNode) GetPredecessor() (bool, uint32) {
@@ -43,7 +48,7 @@ func (chordNode *ChordNode) GetPredecessor() (bool, uint32) {
 }
 
 func (chordNode *ChordNode) InitializeNode() {
-	fmt.Println("In Initialize Node")
+	chordNode.Logger.Println("Chord : In Initialize Node")
 	//FT[i] = succ(id + 2^(i-1))   for 1<=i<=m
 	chordNode.fingerTable = make([]uint32, int(chordNode.MValue)+1)
 
@@ -55,6 +60,7 @@ func (chordNode *ChordNode) InitializeNode() {
 	if chordNode.FirstNode != 1 {
 		chordNode.join(getDefaultServerInfo())
 	} else {
+		chordNode.Logger.Println("Chord InitializeNode : Assigned Successor : " + fmt.Sprint(chordNode.Id))
 		chordNode.Successor = chordNode.Id
 	}
 }
@@ -71,7 +77,7 @@ func getDefaultServerInfo() ServerInfo {
 func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 
 	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(chordNode.Id) + "]}"
-	fmt.Println(jsonMessage)
+	chordNode.Logger.Println(jsonMessage)
 
 	clientServerInfo := rpcclient.ServerInfo{}
 	clientServerInfo.ServerID = serverInfo.ServerID
@@ -83,15 +89,15 @@ func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 	err, response := client.RpcCall(clientServerInfo, jsonMessage)
 
 	if err != nil {
-		fmt.Println(err)
+		chordNode.Logger.Println(err)
 		return
 	}
 
 	//test
-	fmt.Println(response)
+	chordNode.Logger.Println(response)
 	//test
 	chordNode.Predecessor = 0
-	chordNode.Successor = (response.Result[0]).(uint32)
+	chordNode.Successor =uint32((response.Result[0]).(float64))
 
 }
 
@@ -119,15 +125,14 @@ func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
 
 // initially fingerTableIndex = 0
 func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
-	//check every entry in the finger table one after another
-	fingerTableIndex += 1
-	if fingerTableIndex > chordNode.MValue {
-		fingerTableIndex = 1
-	}
 
+	chordNode.Logger.Println("Chord : In fixFingers")
+	
 	//find the successor of (p+2^(i-1)) by initiaing the find_successor call from the current node
 	nextNodeId := chordNode.Id + uint32(math.Pow(2, float64(fingerTableIndex-1)))
 	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(nextNodeId) + "]}"
+
+	chordNode.Logger.Println("Chord : In fixFingers :  nextNodeID node :" + fmt.Sprint(nextNodeId))
 
 	clientServerInfo := rpcclient.ServerInfo{}
 	clientServerInfo.ServerID = chordNode.MyServerInfo.ServerID
@@ -139,14 +144,17 @@ func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
 	err, response := client.RpcCall(clientServerInfo, jsonMessage)
 
 	if err != nil {
-		fmt.Println(err)
+		chordNode.Logger.Println(err)
 		return
 	}
 
-	chordNode.fingerTable[fingerTableIndex] = (response.Result[0]).(uint32)
+	chordNode.fingerTable[fingerTableIndex] = uint32((response.Result[0]).(float64))
 }
 
 func (chordNode *ChordNode) stabilize() {
+	chordNode.Logger.Println("Chord : In Stabilize")
+	
+
 	//RPC call to get predecessor of successor
 	jsonMessage := "{\"method\":\"GetPredecessor\",\"params\":[]}"
 
@@ -160,7 +168,7 @@ func (chordNode *ChordNode) stabilize() {
 	err, response := client.RpcCall(clientServerInfo, jsonMessage)
 
 	if err != nil {
-		fmt.Println(err)
+		chordNode.Logger.Println(err)
 		return
 	}
 
@@ -189,18 +197,27 @@ func (chordNode *ChordNode) stabilize() {
 	err, _ = client.RpcCall(clientServerInfo, jsonMessage)
 
 	if err != nil {
-		fmt.Println(err)
+		chordNode.Logger.Println(err)
 		return
 	}
 }
 
 func (chordNode *ChordNode) RunBackgroundProcesses() {
+	chordNode.Logger.Println("Chord : In Run Background Processes Node")
+	fingerTableIndex :=0
 	ticker := time.NewTicker(time.Millisecond * 500)
 	go func() {
 		for t := range ticker.C {
-			fmt.Println("Tick at", t)
+			chordNode.Logger.Println("Tick at", t)
 			chordNode.stabilize()
-			chordNode.fixFingers(0)
+			
+			//check every entry in the finger table one after another
+			fingerTableIndex += 1
+			if fingerTableIndex > chordNode.MValue {
+				fingerTableIndex = 1
+			}
+
+			chordNode.fixFingers(fingerTableIndex)
 	
 		}
 	}()

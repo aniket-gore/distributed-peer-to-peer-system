@@ -6,5 +6,7 @@
 	"persistentStorageContainer":{"file":"bolt_test_1.txt"},
 	"Methods":["lookup","insert","insertOrUpdate","delete","listKeys","listIDs","shutdown"],
 	"mvalue" : 32,
-	"firstnode": 0
+	"firstnode": 0,
+	"loggerName": "server1.txt" 
+
 }
