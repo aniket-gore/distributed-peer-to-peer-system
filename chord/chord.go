@@ -43,7 +43,7 @@ func (chordNode *ChordNode) GetPredecessor() (bool, uint32) {
 }
 
 func (chordNode *ChordNode) InitializeNode() {
-
+	fmt.Println("In Initialize Node")
 	//FT[i] = succ(id + 2^(i-1))   for 1<=i<=m
 	chordNode.fingerTable = make([]uint32, int(chordNode.MValue)+1)
 
@@ -199,8 +199,9 @@ func (chordNode *ChordNode) RunBackgroundProcesses() {
 	go func() {
 		for t := range ticker.C {
 			fmt.Println("Tick at", t)
-			chordNode.fixFingers(0)
 			chordNode.stabilize()
+			chordNode.fixFingers(0)
+	
 		}
 	}()
 }
