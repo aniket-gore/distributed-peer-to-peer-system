@@ -74,8 +74,11 @@ func (chordNode *ChordNode) InitializeNode() {
 	chordNode.isPredecessorNil = true
 
 	if chordNode.FirstNode != 1 {
+
 		chordNode.join(getDefaultServerInfo())
+
 	} else {
+
 		chordNode.Logger.Println("Chord InitializeNode : Assigned Successor : " + fmt.Sprint(chordNode.Id))
 		chordNode.Successor = chordNode.Id
 	}
@@ -87,6 +90,7 @@ func getDefaultServerInfo() ServerInfo {
 	serverInfo.Protocol = "tcp"
 	serverInfo.IpAddress = "127.0.0.1"
 	serverInfo.Port = 1234
+
 	return serverInfo
 }
 
@@ -114,6 +118,7 @@ func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 	//test
 	chordNode.Predecessor = 0
 	chordNode.Successor = uint32((response.Result[0]).(float64))
+	chordNode.FtServerMapping[chordNode.Successor] = response.Result[1].(ServerInfo)
 
 }
 
@@ -165,6 +170,7 @@ func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
 	}
 
 	chordNode.fingerTable[fingerTableIndex] = uint32((response.Result[0]).(float64))
+	chordNode.FtServerMapping[chordNode.fingerTable[fingerTableIndex]] = response.Result[1].(ServerInfo)
 
 	chordNode.Successor = chordNode.fingerTable[1]
 }
@@ -191,7 +197,8 @@ func (chordNode *ChordNode) stabilize() {
 	}
 
 	isPredecessorOfSuccessorNil := (response.Result[0]).(bool)
-	predecessorOfSuccessor := (response.Result[1]).(uint32)
+	predecessorOfSuccessor := uint32((response.Result[1]).(float64))
+	predecessorOfSuccessorServerInfo := response.Result[2].(ServerInfo)
 
 	//update the successor
 	if !isPredecessorOfSuccessorNil {
@@ -199,6 +206,7 @@ func (chordNode *ChordNode) stabilize() {
 		//predecessor == chordNode.Id refers to the case where the ActualNodesInRing = 1 i.e. predecessor is the node itself
 		if (predecessorOfSuccessor > chordNode.Id && predecessorOfSuccessor < chordNode.Successor) || (!isPredecessorNil && chordNode.Successor == chordNode.Id) {
 			chordNode.Successor = predecessorOfSuccessor
+			chordNode.FtServerMapping[chordNode.Successor] = predecessorOfSuccessorServerInfo
 		}
 	}
 
@@ -207,7 +215,7 @@ func (chordNode *ChordNode) stabilize() {
 	chordNode.Logger.Println("Current Node Predecessor: " + fmt.Sprint(chordNode.Predecessor))
 
 	//RPC call to notify the successor about the predecessor(i.e. current node)
-	jsonMessage = "{\"method\":\"Notify\",\"params\":[" + fmt.Sprint(chordNode.Id) + "]}"
+	jsonMessage = "{\"method\":\"Notify\",\"params\":[" + fmt.Sprint(chordNode.Id) + ", {\"ServerID\":" + chordNode.MyServerInfo.ServerID + ", \"Protocol\":" + chordNode.MyServerInfo.Protocol + ",\"IpAddress\":" + chordNode.MyServerInfo.IpAddress + ",\"Port\":" + fmt.Sprint(chordNode.MyServerInfo.Port) + "}]}"
 
 	clientServerInfo = rpcclient.ServerInfo{}
 	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.fingerTable[1]].ServerID
