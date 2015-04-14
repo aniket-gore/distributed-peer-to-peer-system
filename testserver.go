@@ -29,6 +29,4 @@ func main() {
 		return
 	}
 
-	// rpcServer.InitializeChordNode()
-
 }

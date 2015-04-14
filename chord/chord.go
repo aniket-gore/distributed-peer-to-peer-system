@@ -96,8 +96,8 @@ func getDefaultServerInfo() ServerInfo {
 
 func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 
+	chordNode.Logger.Println("Chord : In Join")
 	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(chordNode.Id) + "]}"
-	chordNode.Logger.Println(jsonMessage)
 
 	clientServerInfo := rpcclient.ServerInfo{}
 	clientServerInfo.ServerID = serverInfo.ServerID
@@ -113,13 +113,26 @@ func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 		return
 	}
 
-	//test
-	chordNode.Logger.Println(response)
-	//test
 	chordNode.Predecessor = 0
 	chordNode.Successor = uint32((response.Result[0]).(float64))
-	chordNode.FtServerMapping[chordNode.Successor] = response.Result[1].(ServerInfo)
 
+	resultServerInfo := ServerInfo{}
+	for key, value := range response.Result[1].(map[string]interface{}) {
+		switch key {
+		case "serverID":
+			resultServerInfo.ServerID = value.(string)
+			break
+		case "protocol":
+			resultServerInfo.Protocol = value.(string)
+			break
+		case "IpAddress":
+			resultServerInfo.IpAddress = value.(string)
+			break
+		case "Port":
+			resultServerInfo.Port = int(value.(float64))
+		}
+	}
+	chordNode.FtServerMapping[chordNode.Successor] = resultServerInfo
 }
 
 func getID(ipAddress string, port int) uint32 {
@@ -134,6 +147,8 @@ func calculateHash(stringValue string) uint32 {
 
 func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
 
+	chordNode.Logger.Println("Chord : In ClosestPrecedingNode")
+	chordNode.Logger.Println("Finger-table=", chordNode.fingerTable)
 	for i := chordNode.MValue; i > 0; i-- {
 		//finger[i] ∈ (n, id)
 		if chordNode.fingerTable[i] > chordNode.Id && chordNode.fingerTable[i] < inputId && chordNode.fingerTable[i] != 0 {
@@ -153,8 +168,6 @@ func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
 	nextNodeId := chordNode.Id + uint32(math.Pow(2, float64(fingerTableIndex-1)))
 	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(nextNodeId) + "]}"
 
-	chordNode.Logger.Println("Chord : In fixFingers :  nextNodeID node :" + fmt.Sprint(nextNodeId))
-
 	clientServerInfo := rpcclient.ServerInfo{}
 	clientServerInfo.ServerID = chordNode.MyServerInfo.ServerID
 	clientServerInfo.Protocol = chordNode.MyServerInfo.Protocol
@@ -170,15 +183,32 @@ func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
 	}
 
 	chordNode.fingerTable[fingerTableIndex] = uint32((response.Result[0]).(float64))
-	chordNode.FtServerMapping[chordNode.fingerTable[fingerTableIndex]] = response.Result[1].(ServerInfo)
 
+	resultServerInfo := ServerInfo{}
+	for key, value := range response.Result[1].(map[string]interface{}) {
+		switch key {
+		case "serverID":
+			resultServerInfo.ServerID = value.(string)
+			break
+		case "protocol":
+			resultServerInfo.Protocol = value.(string)
+			break
+		case "IpAddress":
+			resultServerInfo.IpAddress = value.(string)
+			break
+		case "Port":
+			resultServerInfo.Port = int(value.(float64))
+		}
+	}
+	chordNode.FtServerMapping[chordNode.fingerTable[fingerTableIndex]] = resultServerInfo
 	chordNode.Successor = chordNode.fingerTable[1]
+
+	chordNode.Logger.Println("FingerTable=", chordNode.fingerTable)
 }
 
 func (chordNode *ChordNode) stabilize() {
-	// chordNode.Logger.Println("Chord : In Stabilize")
+	chordNode.Logger.Println("Chord : In Stabilize")
 
-	chordNode.Logger.Println("In Stabilize()")
 	//RPC call to get predecessor of successor
 	jsonMessage := "{\"method\":\"GetPredecessor\",\"params\":[]}"
 
@@ -198,7 +228,24 @@ func (chordNode *ChordNode) stabilize() {
 
 	isPredecessorOfSuccessorNil := (response.Result[0]).(bool)
 	predecessorOfSuccessor := uint32((response.Result[1]).(float64))
-	predecessorOfSuccessorServerInfo := response.Result[2].(ServerInfo)
+
+	resultServerInfo := ServerInfo{}
+	for key, value := range response.Result[2].(map[string]interface{}) {
+		switch key {
+		case "serverID":
+			resultServerInfo.ServerID = value.(string)
+			break
+		case "protocol":
+			resultServerInfo.Protocol = value.(string)
+			break
+		case "IpAddress":
+			resultServerInfo.IpAddress = value.(string)
+			break
+		case "Port":
+			resultServerInfo.Port = int(value.(float64))
+		}
+	}
+	predecessorOfSuccessorServerInfo := resultServerInfo
 
 	//update the successor
 	if !isPredecessorOfSuccessorNil {
@@ -210,12 +257,8 @@ func (chordNode *ChordNode) stabilize() {
 		}
 	}
 
-	chordNode.Logger.Println("Current Node: " + fmt.Sprint(chordNode.Id))
-	chordNode.Logger.Println("Current Node Successor: " + fmt.Sprint(chordNode.Successor))
-	chordNode.Logger.Println("Current Node Predecessor: " + fmt.Sprint(chordNode.Predecessor))
-
 	//RPC call to notify the successor about the predecessor(i.e. current node)
-	jsonMessage = "{\"method\":\"Notify\",\"params\":[" + fmt.Sprint(chordNode.Id) + ", {\"ServerID\":" + chordNode.MyServerInfo.ServerID + ", \"Protocol\":" + chordNode.MyServerInfo.Protocol + ",\"IpAddress\":" + chordNode.MyServerInfo.IpAddress + ",\"Port\":" + fmt.Sprint(chordNode.MyServerInfo.Port) + "}]}"
+	jsonMessage = "{\"method\":\"Notify\",\"params\":[" + fmt.Sprint(chordNode.Id) + ", {\"serverID\":\"" + chordNode.MyServerInfo.ServerID + "\", \"protocol\":\"" + chordNode.MyServerInfo.Protocol + "\",\"IpAddress\":\"" + chordNode.MyServerInfo.IpAddress + "\",\"Port\":" + fmt.Sprint(chordNode.MyServerInfo.Port) + "}]}"
 
 	clientServerInfo = rpcclient.ServerInfo{}
 	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.fingerTable[1]].ServerID
@@ -233,20 +276,17 @@ func (chordNode *ChordNode) stabilize() {
 }
 
 func (chordNode *ChordNode) RunBackgroundProcesses() {
-	chordNode.Logger.Println("Chord : In Run Background Processes Node")
-	fingerTableIndex := 0
-	ticker := time.NewTicker(time.Millisecond * 500)
+	chordNode.Logger.Println("Chord : In RunBackgroundProcesses")
+	ticker := time.NewTicker(time.Millisecond * 5000)
 	go func() {
 		for t := range ticker.C {
 			chordNode.Logger.Println("Tick at", t)
 			chordNode.stabilize()
 
 			//check every entry in the finger table one after another
-			fingerTableIndex += 1
-			if fingerTableIndex > chordNode.MValue {
-				fingerTableIndex = 1
+			for fingerTableIndex := 1; fingerTableIndex <= chordNode.MValue; fingerTableIndex++ {
+				chordNode.fixFingers(fingerTableIndex)
 			}
-			chordNode.fixFingers(fingerTableIndex)
 		}
 	}()
 }
