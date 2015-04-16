@@ -60,6 +60,11 @@ func (chordNode *ChordNode) GetPredecessor() (bool, uint32) {
 	}
 }
 
+func (chordNode *ChordNode) SetPredecessor(predecessor uint32) {
+	chordNode.isPredecessorNil = false
+	chordNode.Predecessor = predecessor
+}
+
 func (chordNode *ChordNode) InitializeNode() {
 	chordNode.Logger.Println("Chord : In Initialize Node")
 	//FT[i] = succ(id + 2^(i-1))   for 1<=i<=m
@@ -148,7 +153,6 @@ func calculateHash(stringValue string) uint32 {
 func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
 
 	chordNode.Logger.Println("Chord : In ClosestPrecedingNode")
-	chordNode.Logger.Println("Finger-table=", chordNode.fingerTable)
 	for i := chordNode.MValue; i > 0; i-- {
 		//finger[i] ∈ (n, id)
 		if chordNode.fingerTable[i] > chordNode.Id && chordNode.fingerTable[i] < inputId && chordNode.fingerTable[i] != 0 {
@@ -156,7 +160,7 @@ func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
 		}
 	}
 
-	return 0
+	return chordNode.Id
 }
 
 // initially fingerTableIndex = 0
@@ -276,11 +280,13 @@ func (chordNode *ChordNode) stabilize() {
 }
 
 func (chordNode *ChordNode) RunBackgroundProcesses() {
-	chordNode.Logger.Println("Chord : In RunBackgroundProcesses")
-	ticker := time.NewTicker(time.Millisecond * 5000)
+	ticker := time.NewTicker(time.Millisecond * 2000)
 	go func() {
 		for t := range ticker.C {
 			chordNode.Logger.Println("Tick at", t)
+			chordNode.Logger.Println("Chord : In RunBackgroundProcesses")
+			chordNode.Logger.Println("Successor=", chordNode.Successor)
+			chordNode.Logger.Println("Predecessor=", chordNode.Predecessor)
 			chordNode.stabilize()
 
 			//check every entry in the finger table one after another
