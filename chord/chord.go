@@ -230,34 +230,40 @@ func (chordNode *ChordNode) stabilize() {
 		return
 	}
 
-	isPredecessorOfSuccessorNil := (response.Result[0]).(bool)
-	predecessorOfSuccessor := uint32((response.Result[1]).(float64))
+	// process only if response is present -- CASE WHERE SUCCESSOR LEAVES ABRUPTLY
+	if response.Result != nil {
+		isPredecessorOfSuccessorNil := (response.Result[0]).(bool)
+		predecessorOfSuccessor := uint32((response.Result[1]).(float64))
 
-	resultServerInfo := ServerInfo{}
-	for key, value := range response.Result[2].(map[string]interface{}) {
-		switch key {
-		case "serverID":
-			resultServerInfo.ServerID = value.(string)
-			break
-		case "protocol":
-			resultServerInfo.Protocol = value.(string)
-			break
-		case "IpAddress":
-			resultServerInfo.IpAddress = value.(string)
-			break
-		case "Port":
-			resultServerInfo.Port = int(value.(float64))
+		resultServerInfo := ServerInfo{}
+		for key, value := range response.Result[2].(map[string]interface{}) {
+			switch key {
+			case "serverID":
+				resultServerInfo.ServerID = value.(string)
+				break
+			case "protocol":
+				resultServerInfo.Protocol = value.(string)
+				break
+			case "IpAddress":
+				resultServerInfo.IpAddress = value.(string)
+				break
+			case "Port":
+				resultServerInfo.Port = int(value.(float64))
+			}
 		}
-	}
-	predecessorOfSuccessorServerInfo := resultServerInfo
+		predecessorOfSuccessorServerInfo := resultServerInfo
 
-	//update the successor
-	if !isPredecessorOfSuccessorNil {
-		isPredecessorNil, _ := chordNode.GetPredecessor()
-		//predecessor == chordNode.Id refers to the case where the ActualNodesInRing = 1 i.e. predecessor is the node itself
-		if (predecessorOfSuccessor > chordNode.Id && predecessorOfSuccessor < chordNode.Successor) || (!isPredecessorNil && chordNode.Successor == chordNode.Id) {
-			chordNode.Successor = predecessorOfSuccessor
-			chordNode.FtServerMapping[chordNode.Successor] = predecessorOfSuccessorServerInfo
+		//update the successor
+		if !isPredecessorOfSuccessorNil {
+			isPredecessorNil, _ := chordNode.GetPredecessor()
+			//predecessor == chordNode.Id refers to the case where the ActualNodesInRing = 1 i.e. predecessor is the node itself
+			if (predecessorOfSuccessor > chordNode.Id && predecessorOfSuccessor < chordNode.Successor) ||
+				(!isPredecessorNil && chordNode.Successor == chordNode.Id) ||
+				(chordNode.Successor < chordNode.Id && predecessorOfSuccessor < chordNode.Successor) ||
+				(chordNode.Successor < chordNode.Id && predecessorOfSuccessor > chordNode.Successor && predecessorOfSuccessor > chordNode.Id) {
+				chordNode.Successor = predecessorOfSuccessor
+				chordNode.FtServerMapping[chordNode.Successor] = predecessorOfSuccessorServerInfo
+			}
 		}
 	}
 
