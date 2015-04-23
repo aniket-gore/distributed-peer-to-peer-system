@@ -983,9 +983,7 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 			succId = rpcMethod.rpcServer.chordNode.Id
 		} else {
 
-			//if interId == 0 what to do?
-
-			//create rpc call "{"method":"findSuccessor","params":[interid]}"
+			//create rpc call "{"method":"findSuccessor","params":[inputId]}"
 			jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(inputId) + "]}"
 
 			clientServerInfo := rpcclient.ServerInfo{}
@@ -1002,33 +1000,35 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 				return nil
 			}
 
-			succId = uint32(response.Result[0].(float64))
-
-			resultServerInfo := chord.ServerInfo{}
-			for key, value := range response.Result[1].(map[string]interface{}) {
-				switch key {
-				case "serverID":
-					resultServerInfo.ServerID = value.(string)
-					break
-				case "protocol":
-					resultServerInfo.Protocol = value.(string)
-					break
-				case "IpAddress":
-					resultServerInfo.IpAddress = value.(string)
-					break
-				case "Port":
-					resultServerInfo.Port = int(value.(float64))
-				}
-			}
-			succServerInfo = resultServerInfo
-
 			jsonOutput.Result = make([]interface{}, 2)
-			//insert successor ID into jsonOutput
-			jsonOutput.Result[0] = succId
+			// process only if response is present
+			if response.Result != nil {
+				succId = uint32(response.Result[0].(float64))
 
-			//insert succId's serverInfo into jsonOutput
-			jsonOutput.Result[1] = succServerInfo
+				resultServerInfo := chord.ServerInfo{}
+				for key, value := range response.Result[1].(map[string]interface{}) {
+					switch key {
+					case "serverID":
+						resultServerInfo.ServerID = value.(string)
+						break
+					case "protocol":
+						resultServerInfo.Protocol = value.(string)
+						break
+					case "IpAddress":
+						resultServerInfo.IpAddress = value.(string)
+						break
+					case "Port":
+						resultServerInfo.Port = int(value.(float64))
+					}
+				}
+				succServerInfo = resultServerInfo
 
+				//insert successor ID into jsonOutput
+				jsonOutput.Result[0] = succId
+
+				//insert succId's serverInfo into jsonOutput
+				jsonOutput.Result[1] = succServerInfo
+			}
 			rpcMethod.rpcServer.logger.Println("Result from findSucc=", jsonOutput.Result)
 			return nil
 		} // END-ELSE
@@ -1141,9 +1141,21 @@ func (rpcMethod *RPCMethod) Notify(jsonInput RequestParameters, jsonOutput *Resp
 		predecessor == nodeId ||
 		(probablePredecessorId < nodeId && predecessor > probablePredecessorId && predecessor > nodeId) ||
 		(probablePredecessorId > nodeId && predecessor < probablePredecessorId && predecessor > nodeId) {
-		rpcMethod.rpcServer.chordNode.SetPredecessor(probablePredecessorId)
+		rpcMethod.rpcServer.chordNode.SetPredecessor(false, probablePredecessorId)
 		rpcMethod.rpcServer.chordNode.FtServerMapping[rpcMethod.rpcServer.chordNode.Predecessor] = probablePredecessorServerInfo
 	}
+
+	return nil
+}
+
+/*
+request <-"{"method":"CheckPredecessor","params":[]}"
+response <- "{"result":[true],"id":,"error":null }"
+*/
+func (rpcMethod *RPCMethod) CheckPredecessor(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+
+	jsonOutput.Result = make([]interface{}, 1)
+	jsonOutput.Result[0] = true
 
 	return nil
 }

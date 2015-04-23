@@ -60,8 +60,8 @@ func (chordNode *ChordNode) GetPredecessor() (bool, uint32) {
 	}
 }
 
-func (chordNode *ChordNode) SetPredecessor(predecessor uint32) {
-	chordNode.isPredecessorNil = false
+func (chordNode *ChordNode) SetPredecessor(isPredecessorNil bool, predecessor uint32) {
+	chordNode.isPredecessorNil = isPredecessorNil
 	chordNode.Predecessor = predecessor
 }
 
@@ -186,27 +186,29 @@ func (chordNode *ChordNode) fixFingers(fingerTableIndex int) {
 		return
 	}
 
-	chordNode.fingerTable[fingerTableIndex] = uint32((response.Result[0]).(float64))
+	// process only if response is present
+	if response.Result != nil {
+		chordNode.fingerTable[fingerTableIndex] = uint32((response.Result[0]).(float64))
 
-	resultServerInfo := ServerInfo{}
-	for key, value := range response.Result[1].(map[string]interface{}) {
-		switch key {
-		case "serverID":
-			resultServerInfo.ServerID = value.(string)
-			break
-		case "protocol":
-			resultServerInfo.Protocol = value.(string)
-			break
-		case "IpAddress":
-			resultServerInfo.IpAddress = value.(string)
-			break
-		case "Port":
-			resultServerInfo.Port = int(value.(float64))
+		resultServerInfo := ServerInfo{}
+		for key, value := range response.Result[1].(map[string]interface{}) {
+			switch key {
+			case "serverID":
+				resultServerInfo.ServerID = value.(string)
+				break
+			case "protocol":
+				resultServerInfo.Protocol = value.(string)
+				break
+			case "IpAddress":
+				resultServerInfo.IpAddress = value.(string)
+				break
+			case "Port":
+				resultServerInfo.Port = int(value.(float64))
+			}
 		}
+		chordNode.FtServerMapping[chordNode.fingerTable[fingerTableIndex]] = resultServerInfo
+		chordNode.Successor = chordNode.fingerTable[1]
 	}
-	chordNode.FtServerMapping[chordNode.fingerTable[fingerTableIndex]] = resultServerInfo
-	chordNode.Successor = chordNode.fingerTable[1]
-
 	chordNode.Logger.Println("FingerTable=", chordNode.fingerTable)
 }
 
@@ -267,6 +269,7 @@ func (chordNode *ChordNode) stabilize() {
 		}
 	}
 
+	chordNode.Logger.Println("About to make RPC call: Notify")
 	//RPC call to notify the successor about the predecessor(i.e. current node)
 	jsonMessage = "{\"method\":\"Notify\",\"params\":[" + fmt.Sprint(chordNode.Id) + ", {\"serverID\":\"" + chordNode.MyServerInfo.ServerID + "\", \"protocol\":\"" + chordNode.MyServerInfo.Protocol + "\",\"IpAddress\":\"" + chordNode.MyServerInfo.IpAddress + "\",\"Port\":" + fmt.Sprint(chordNode.MyServerInfo.Port) + "}]}"
 
@@ -285,6 +288,41 @@ func (chordNode *ChordNode) stabilize() {
 	}
 }
 
+func (chordNode *ChordNode) checkPredecessor() {
+
+	chordNode.Logger.Println("Chord : In checkPredecessor")
+
+	//RPC call to check predecessor
+	jsonMessage := "{\"method\":\"CheckPredecessor\",\"params\":[]}"
+
+	chordNode.Logger.Println("Predecessor:", chordNode.Predecessor)
+	chordNode.Logger.Println("Predecessor serverInfo:", chordNode.FtServerMapping[chordNode.Predecessor])
+	clientServerInfo := rpcclient.ServerInfo{}
+	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.Predecessor].ServerID
+	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.Predecessor].Protocol
+	clientServerInfo.IpAddress = chordNode.FtServerMapping[chordNode.Predecessor].IpAddress
+	clientServerInfo.Port = chordNode.FtServerMapping[chordNode.Predecessor].Port
+
+	chordNode.Logger.Println("RPC call to:", clientServerInfo)
+
+	client := &rpcclient.RPCClient{}
+	err, response := client.RpcCall(clientServerInfo, jsonMessage)
+
+	chordNode.Logger.Println("Response:", response)
+
+	if err != nil {
+		chordNode.Logger.Println(err)
+		return
+	}
+
+	chordNode.Logger.Println("response.Result=", response.Result)
+	// Set the predecessor to nil if empty response
+	if response.Result == nil {
+		chordNode.Logger.Println("SETTING PREDECESSOR TO NIL")
+		chordNode.SetPredecessor(true, 0)
+	}
+}
+
 func (chordNode *ChordNode) RunBackgroundProcesses() {
 	ticker := time.NewTicker(time.Millisecond * 2000)
 	go func() {
@@ -299,6 +337,9 @@ func (chordNode *ChordNode) RunBackgroundProcesses() {
 			for fingerTableIndex := 1; fingerTableIndex <= chordNode.MValue; fingerTableIndex++ {
 				chordNode.fixFingers(fingerTableIndex)
 			}
+
+			//check if predecessor is nil
+			chordNode.checkPredecessor()
 		}
 	}()
 }
