@@ -2,7 +2,7 @@
 	"serverID":"server2",
 	"protocol":"tcp",
 	"IpAddress":"127.0.0.1",
-	"Port":5555,
+	"Port":1236,
 	"persistentStorageContainer":{"file":"bolt_test_2.txt"},
 	"Methods":["lookup","insert","insertOrUpdate","delete","listKeys","listIDs","shutdown"],
 	"mvalue" : 32,

@@ -41,6 +41,8 @@ type ResponseParametersInsert struct {
 	Error  interface{} `json:"error"`
 }
 
+
+
 //can be a file or a database
 type PersistentContainerType struct {
 	PersistentFilePath string `json:"file"`
@@ -585,6 +587,8 @@ func (rpcMethod *RPCMethod) Delete(jsonInput RequestParameters, jsonOutput *Resp
 
 }
 
+
+
 //wrapper to shutdown
 func (rpcMethod *RPCMethod) Shutdown(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
 	var err error
@@ -603,6 +607,14 @@ func (rpcMethod *RPCMethod) Shutdown(jsonInput RequestParameters, jsonOutput *Re
 	defer rpcMethod.rpcServer.routineDone()
 	rpcMethod.rpcServer.logger.Println(jsonInput.Method)
 
+	//n may notify its predecessor p and successor s before leaving
+	rpcMethod.rpcServer.chordNode.NotifyShutDownToRing();
+	
+
+	//transfer keys to successor 
+	rpcMethod.rpcServer.makeInsertsToSuccessor()
+	
+
 	response := new(ResponseParameters)
 
 	if err := rpcMethod.shutDown(); err != nil {
@@ -611,6 +623,11 @@ func (rpcMethod *RPCMethod) Shutdown(jsonInput RequestParameters, jsonOutput *Re
 
 	}
 
+
+
+	
+
+	
 	//no response
 	response = nil
 
@@ -813,7 +830,7 @@ func (rpcServer *RPCServer) InitializeServerConfig(inputConfigObject ConfigType)
 	}
 
 	rpcServer.logger = log.New(file, "log: ", log.LstdFlags)
-
+	rpcServer.logger.SetFlags(log.LstdFlags | log.Lshortfile)
 	return nil
 }
 
@@ -1002,11 +1019,11 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 
 			jsonOutput.Result = make([]interface{}, 2)
 			// process only if response is present
-			if response.Result != nil {
-				succId = uint32(response.Result[0].(float64))
+			if response.(*(rpcclient.ResponseParameters)).Result != nil {
+				succId = uint32(response.(*(rpcclient.ResponseParameters)).Result[0].(float64))
 
 				resultServerInfo := chord.ServerInfo{}
-				for key, value := range response.Result[1].(map[string]interface{}) {
+				for key, value := range response.(*(rpcclient.ResponseParameters)).Result[1].(map[string]interface{}) {
 					switch key {
 					case "serverID":
 						resultServerInfo.ServerID = value.(string)
@@ -1160,4 +1177,142 @@ func (rpcMethod *RPCMethod) CheckPredecessor(jsonInput RequestParameters, jsonOu
 	return nil
 }
 
+/*
+set new Predecessor when predecessor has left
+request <-"{"method":"PredecessorLeft","params":[PredecessorServerinfo_object]}"
+response <- "{"result":[true],"id":,"error":null }"
+*/
+func (rpcMethod * RPCMethod) PredecessorLeft(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+	//Initialize rpcserver
+	var err error
+	err, rpcMethod.rpcServer = GetRPCServerInstance()
+	var customError error
+	if err != nil {
+		customError = errors.New("Getting Server Instance error :" + err.Error())
+		rpcMethod.rpcServer.logger.Println(customError)
+		return customError
+	}
+
+
+
+	//get inputId from the []interface
+	var newPredecessor chord.ServerInfoWithID 
+	//again marshal and unmarshal - reason it was getting marshalled into map[string]interface{}
+	serverInfoBytes,_ := json.Marshal(jsonInput.Params[0])
+	if err = json.Unmarshal(serverInfoBytes,&newPredecessor); err!=nil{
+		rpcMethod.rpcServer.logger.Println(err)
+	}
+
+	rpcMethod.rpcServer.logger.Println(string(serverInfoBytes))
+	rpcMethod.rpcServer.chordNode.SetPredecessor(false,newPredecessor.Id)
+	rpcMethod.rpcServer.chordNode.FtServerMapping[newPredecessor.Id]=newPredecessor.ServerInfo
+	
+	//response
+	jsonOutput.Result = make([]interface{}, 1)
+	jsonOutput.Result[0] = true
+
+	return nil
+
+}
+
+
+/*
+set new Successor when successor has left
+request <-"{"method":"SuccesorLeft","params":[SuccessorServerinfo_object]}"
+response <- "{"result":[true],"id":,"error":null }"
+*/
+func (rpcMethod * RPCMethod) SuccessorLeft(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+	//Initialize rpcserver
+	var err error
+	err, rpcMethod.rpcServer = GetRPCServerInstance()
+	var customError error
+	if err != nil {
+		customError = errors.New("Getting Server Instance error :" + err.Error())
+		rpcMethod.rpcServer.logger.Println(customError)
+		return customError
+	}
+
+
+	//get inputId from the []interface
+	var newSuccessor chord.ServerInfoWithID 
+	//again marshal and unmarshal - reason it was getting marshalled into map[string]interface{}
+	serverInfoBytes,_ := json.Marshal(jsonInput.Params[0])
+	if err = json.Unmarshal(serverInfoBytes,&newSuccessor); err!=nil{
+		rpcMethod.rpcServer.logger.Println(err)
+	}
+	rpcMethod.rpcServer.logger.Println(string(serverInfoBytes))
+
+	rpcMethod.rpcServer.chordNode.Successor = newSuccessor.Id
+	rpcMethod.rpcServer.chordNode.FingerTable[1] =  newSuccessor.Id
+	rpcMethod.rpcServer.chordNode.FtServerMapping[newSuccessor.Id]=newSuccessor.ServerInfo
+	
+	//response
+	jsonOutput.Result = make([]interface{}, 1)
+	jsonOutput.Result[0] = true
+
+	return nil
+
+}
+
+func (rpcServer * RPCServer)makeInsertsToSuccessor(){
+	//open a read transaction
+	rpcServer.boltDB.View(func(tx *bolt.Tx) error {
+		var cursor *bolt.Cursor
+		cursor = tx.Cursor()
+		
+		var bucket *bolt.Bucket
+		
+
+		//traverse through all keys
+		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
+			bucket = tx.Bucket(k)
+			
+			//traverse through all relation and value pairs
+			bucket.ForEach(func(relation, value []byte) error {
+				//create paramter - successor
+			
+				//add to array of interface
+				
+				parameterArray := make([]interface{},3)
+				parameterArray[0] = string(k)
+				parameterArray[1] = string(relation)
+				parameterArray[2] = string(value)
+				
+
+				//create json message
+				jsonMessage := rpcclient.RequestParameters{}
+				jsonMessage.Method = "Insert";
+				jsonMessage.Params = parameterArray
+				
+				jsonBytes,err :=json.Marshal(jsonMessage)
+				if err!=nil{
+					rpcServer.logger.Println(err)
+					return err
+				} 
+               
+				rpcServer.logger.Println(string(jsonBytes))
+
+				clientServerInfo,err := rpcServer.chordNode.PrepareClientServerInfo(rpcServer.chordNode.FingerTable[1])
+				if err!=nil{
+					
+					rpcServer.logger.Println(err)
+					return nil
+					
+				}
+				client := &rpcclient.RPCClient{}
+				err, _ = client.RpcCall(clientServerInfo, string(jsonBytes))
+				
+				if err != nil {
+					rpcServer.logger.Println(err)
+					return nil
+				}
+				
+				
+				return nil
+			})
+		}
+		return nil
+	})
+
+}
 /*****************************Chord related functions**************************************************/

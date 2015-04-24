@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net/rpc"
 	"net/rpc/jsonrpc"
-	"os"
 	"strconv"
 	"time"
 )
@@ -171,10 +170,10 @@ func (client *RPCClient) CreateAsyncRPC(jsonMessage string, serverName string) e
 }
 
 //process calls by reading the channel of Calls
-func (client *RPCClient) ProcessReply() (error, ResponseParameters) {
+func (client *RPCClient) ProcessReply() (error, interface{}) {
 
 	defer client.connection.Close()
-	rp := ResponseParameters{}
+	var rp interface{}
 	//should take timeout as config argument
 	var timeout <-chan time.Time
 	timeout = time.After(10000 * time.Millisecond)
@@ -184,13 +183,13 @@ func (client *RPCClient) ProcessReply() (error, ResponseParameters) {
 
 		if replyCall.Error != nil {
 			fmt.Println(replyCall.Error)
-			return replyCall.Error, ResponseParameters{}
+			return replyCall.Error, nil
 
 		}
-		rp = *(replyCall.Reply).(*ResponseParameters)
+		rp = replyCall.Reply
 		//fmt.Println("reply:", *(replyCall.Reply).(*ResponseParameters))
-		encoder := json.NewEncoder(os.Stdout)
-		encoder.Encode(replyCall.Reply)
+		//encoder := json.NewEncoder(os.Stdout)
+		//encoder.Encode(replyCall.Reply)
 		//initialize timout
 		timeout = time.After(10000 * time.Millisecond)
 	case <-timeout:
@@ -201,13 +200,13 @@ func (client *RPCClient) ProcessReply() (error, ResponseParameters) {
 	return nil, rp
 }
 
-func (client *RPCClient) RpcCall(serverInfo ServerInfo, requestMessage string) (error, ResponseParameters) {
+func (client *RPCClient) RpcCall(serverInfo ServerInfo, requestMessage string) (error, interface{}) {
 
 	network := serverInfo.Protocol
 	address := serverInfo.IpAddress + ":" + strconv.Itoa(serverInfo.Port)
 	serverName := serverInfo.ServerID
-
-	response := ResponseParameters{}
+	
+	var response interface{}
 	//create new client
 	if err := client.NewClient(network, address); err != nil {
 		fmt.Println(err)
@@ -227,5 +226,8 @@ func (client *RPCClient) RpcCall(serverInfo ServerInfo, requestMessage string) (
 		return err, response
 	}
 
+	
 	return nil, response
 }
+
+
