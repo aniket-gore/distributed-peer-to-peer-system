@@ -2,6 +2,7 @@ package chord
 
 import (
 	"621_proj/rpcclient"
+	"621_proj/hashing"
 	"fmt"
 	"hash/fnv"
 	"log"
@@ -82,7 +83,10 @@ func (chordNode *ChordNode) InitializeNode() {
 
 	//initialize predecessor and successor to own ID
 	chordNode.Id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
-
+	
+	//chordNode.Id = getSHAID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port, chordNode.MValue)
+	
+	
 	chordNode.isPredecessorNil = true
 
 	if chordNode.FirstNode != 1 {
@@ -145,6 +149,10 @@ func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 		}
 	}
 	chordNode.FtServerMapping[chordNode.Successor] = resultServerInfo
+}
+
+func getSHAID(ipAddress string, port int, mBits int) uint32{
+	return hashing.GetStartingBits(ipAddress + "_" + string(port),mBits)
 }
 
 func getID(ipAddress string, port int) uint32 {
