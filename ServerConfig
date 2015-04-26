@@ -7,5 +7,7 @@
 	"Methods":["lookup","insert","insertOrUpdate","delete","listKeys","listIDs","shutdown"],
 	"mvalue" : 32,
 	"firstnode": 1,
-	"loggerName": "mainNode.txt" 
+	"loggerName": "mainNode.txt",
+	"keyHashLength": 16, 
+	"relationHashLength": 16
 }

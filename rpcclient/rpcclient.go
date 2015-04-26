@@ -16,7 +16,7 @@ type ServerInfo struct {
 	Protocol  string `json:"protocol"`
 	IpAddress string `json: "ipAddress"`
 	Port      int    `json: "port"`
-	//ChordID   int      `json: "chordID"`
+
 }
 
 //structure for parsing Response from server

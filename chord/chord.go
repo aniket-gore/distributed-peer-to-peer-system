@@ -12,22 +12,24 @@ import (
 	"errors"
 )
 
+/*
 type ServerInfo struct {
 	ServerID  string `json:"serverID"`
 	Protocol  string `json:"protocol"`
 	IpAddress string `json: "ipAddress"`
 	Port      int    `json: "port"`
 }
+*/
 
 type ServerInfoWithID struct{
-	ServerInfo ServerInfo `json:"serverInfo"`
+	ServerInfo rpcclient.ServerInfo `json:"serverInfo"`
 	Id uint32 `json:"Id,string"`
 }
 
 type ChordNode struct {
 
 	//exposed
-	MyServerInfo ServerInfo
+	MyServerInfo rpcclient.ServerInfo
 	MValue       int
 	FirstNode    int
 
@@ -40,17 +42,19 @@ type ChordNode struct {
 	//key = index in finger table and  value = chord ID
 	FingerTable []uint32
 	//map another chord ID to their actual server info
-	FtServerMapping map[uint32]ServerInfo
+	FtServerMapping map[uint32]rpcclient.ServerInfo
 
 	//logger from rpcServer
 	Logger *log.Logger
+	KeyHashLength int
+	RelationHashLength int
 }
 
-func (chordNode *ChordNode) updateFtServerMapping(id uint32, serverInfo ServerInfo) {
+func (chordNode *ChordNode) updateFtServerMapping(id uint32, serverInfo rpcclient.ServerInfo) {
 
 	if _, ok := chordNode.FtServerMapping[id]; !ok {
 
-		clientServerInfo := ServerInfo{}
+		clientServerInfo := rpcclient.ServerInfo{}
 		clientServerInfo.ServerID = serverInfo.ServerID
 		clientServerInfo.Protocol = serverInfo.Protocol
 		clientServerInfo.IpAddress = serverInfo.IpAddress
@@ -79,7 +83,7 @@ func (chordNode *ChordNode) InitializeNode() {
 	chordNode.FingerTable = make([]uint32, int(chordNode.MValue)+1)
 
 	//create an empty map for server mappings
-	chordNode.FtServerMapping = make(map[uint32]ServerInfo)
+	chordNode.FtServerMapping = make(map[uint32]rpcclient.ServerInfo)
 
 	//initialize predecessor and successor to own ID
 	chordNode.Id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
@@ -100,8 +104,8 @@ func (chordNode *ChordNode) InitializeNode() {
 	}
 }
 
-func getDefaultServerInfo() ServerInfo {
-	serverInfo := ServerInfo{}
+func getDefaultServerInfo() rpcclient.ServerInfo {
+	serverInfo := rpcclient.ServerInfo{}
 	serverInfo.ServerID = "mainserver"
 	serverInfo.Protocol = "tcp"
 	serverInfo.IpAddress = "127.0.0.1"
@@ -110,7 +114,7 @@ func getDefaultServerInfo() ServerInfo {
 	return serverInfo
 }
 
-func (chordNode *ChordNode) join(serverInfo ServerInfo) {
+func (chordNode *ChordNode) join(serverInfo rpcclient.ServerInfo) {
 
 	chordNode.Logger.Println("Chord : In Join")
 	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(chordNode.Id) + "]}"
@@ -132,7 +136,7 @@ func (chordNode *ChordNode) join(serverInfo ServerInfo) {
 	chordNode.Predecessor = 0
 	chordNode.Successor = uint32((response.(*(rpcclient.ResponseParameters)).Result[0]).(float64))
 
-	resultServerInfo := ServerInfo{}
+	resultServerInfo := rpcclient.ServerInfo{}
 	for key, value := range response.(*(rpcclient.ResponseParameters)).Result[1].(map[string]interface{}) {
 		switch key {
 		case "serverID":
@@ -205,7 +209,7 @@ func (chordNode *ChordNode) fixFingers(FingerTableIndex int) {
 	if response.(*(rpcclient.ResponseParameters)).Result != nil {
 		chordNode.FingerTable[FingerTableIndex] = uint32((response.(*(rpcclient.ResponseParameters)).Result[0]).(float64))
 
-		resultServerInfo := ServerInfo{}
+		resultServerInfo := rpcclient.ServerInfo{}
 		for key, value := range response.(*(rpcclient.ResponseParameters)).Result[1].(map[string]interface{}) {
 			switch key {
 			case "serverID":
@@ -252,7 +256,7 @@ func (chordNode *ChordNode) stabilize() {
 		isPredecessorOfSuccessorNil := (response.(*(rpcclient.ResponseParameters)).Result[0]).(bool)
 		predecessorOfSuccessor := uint32((response.(*(rpcclient.ResponseParameters)).Result[1]).(float64))
 
-		resultServerInfo := ServerInfo{}
+		resultServerInfo := rpcclient.ServerInfo{}
 		for key, value := range response.(*(rpcclient.ResponseParameters)).Result[2].(map[string]interface{}) {
 			switch key {
 			case "serverID":
@@ -460,4 +464,81 @@ func (chordNode *ChordNode)PrepareClientServerInfo(chordID uint32)(rpcclient.Ser
 		return rpcclient.ServerInfo{},customError
 	}
 	
+}
+
+
+/*
+get node for forwarding the request 
+*/
+
+func (chordNode * ChordNode)ForwardInsert(reqPar []interface{}) (ServerInfoWithID,error) {
+	//Unmarshal into array of interfaces
+	var parameters []interface{}
+	parameters = reqPar
+
+	//Use dict3 struct to unmarshall
+	var key string
+	var relation string
+	for k, v := range parameters {
+	
+		if k == 0 {
+			key = v.(string)
+		} else if k == 1 {
+			relation = v.(string)
+		} else if k == 2 {
+			//dict3.Value = v
+		}
+	}
+
+
+	//get hash values for key and relation
+	keyHash :=hashing.GetStartingBits(key,chordNode.KeyHashLength)
+	relationHash := hashing.GetStartingBits(relation,chordNode.RelationHashLength)
+	
+	var finalChordID uint32
+	finalChordID = keyHash<<uint(chordNode.RelationHashLength) | relationHash
+	
+	//findsuccessor for finalChordID
+			
+	//create json message
+	jsonMessage := rpcclient.RequestParameters{}
+	jsonMessage.Method = "findSuccessor";
+	jsonMessage.Params = make([]interface{},1)
+	jsonMessage.Params[0] = finalChordID
+	jsonBytes,err :=json.Marshal(jsonMessage)
+	if err!=nil{
+		chordNode.Logger.Println(err)
+		return ServerInfoWithID{},err
+	} 
+               
+	chordNode.Logger.Println(string(jsonBytes))
+	
+	//prepare server info
+	clientServerInfo,err := chordNode.PrepareClientServerInfo(chordNode.FingerTable[1])
+	if err!=nil{
+		chordNode.Logger.Println(err)
+		return ServerInfoWithID{},err
+	}
+	client := &rpcclient.RPCClient{}
+	err, response := client.RpcCall(clientServerInfo, string(jsonBytes))
+		
+	if err != nil {
+		chordNode.Logger.Println(err)
+		return ServerInfoWithID{},err
+	}
+		
+	var successorInfo ServerInfoWithID
+	successorInfo.Id = uint32((response.(*(rpcclient.ResponseParameters)).Result[0]).(float64))
+	
+	//again marshal and unmarshal - reason it was getting marshalled into map[string]interface{}
+	serverInfoBytes,_ := json.Marshal(response.(*(rpcclient.ResponseParameters)).Result[1])
+	if err = json.Unmarshal(serverInfoBytes,&(successorInfo.ServerInfo)); err!=nil{
+		chordNode.Logger.Println(err)
+		return ServerInfoWithID{},err
+	}
+
+	
+	
+
+	return successorInfo,nil
 }

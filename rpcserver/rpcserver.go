@@ -60,6 +60,9 @@ type ConfigType struct {
 	MValue     int    `json: "mvalue"`
 	FirstNode  int    `json: "firstnode"`
 	LoggerName string `json: "loggerName"`
+	KeyHashLength int `json: "keyHashLength"`
+	RelationHashLength int `json: "relationHashLength"`
+ 
 }
 
 //this struct object will manage the server
@@ -459,11 +462,45 @@ func (rpcMethod *RPCMethod) Insert(jsonInput RequestParameters, jsonOutput *Resp
 
 	//response := new(ResponseParameters)
 	response := new(ResponseParametersInsert)
-
-	if err := rpcMethod.insert(jsonInput.Params, response); err != nil {
+	
+	//get Successor for the insert
+	var successorInfo chord.ServerInfoWithID
+	successorInfo,err = rpcMethod.rpcServer.chordNode.ForwardInsert(jsonInput.Params)
+	if err !=nil{
 		rpcMethod.rpcServer.logger.Println(err)
-		response.Result = nil
-		response.Error = 1
+		return err
+	}
+	//for the target successor  - ID returned will be the same as chordNode.Id
+	if successorInfo.Id != rpcMethod.rpcServer.chordNode.Id{
+		
+		jsonBytes,err :=json.Marshal(jsonInput)
+		if err!=nil{
+			rpcMethod.rpcServer.logger.Println(err)
+			return err
+		} 
+		
+		var responseTemp interface{}
+		client := &rpcclient.RPCClient{}
+		err, responseTemp = client.RpcCall(successorInfo.ServerInfo, string(jsonBytes))
+		
+		if err != nil {
+			rpcMethod.rpcServer.logger.Println(err)
+			return nil
+		}
+		
+		response.Result = responseTemp.(*rpcclient.ResponseParametersInsert).Result
+		response.Error = responseTemp.(*rpcclient.ResponseParametersInsert).Error
+
+		
+		//get Successor for the insert - ends
+	}else{
+		
+		//make the actual call on the target successor
+		if err := rpcMethod.insert(jsonInput.Params, response); err != nil {
+			rpcMethod.rpcServer.logger.Println(err)
+			response.Result = nil
+			response.Error = 1
+		}
 	}
 	//just set ID over here
 	//the rest response is set by respective method
@@ -924,6 +961,8 @@ func (rpcServer *RPCServer) InitializeChordNode() {
 	rpcServer.chordNode.MValue = rpcServer.configObject.MValue
 	rpcServer.chordNode.FirstNode = rpcServer.configObject.FirstNode
 	rpcServer.chordNode.Logger = rpcServer.logger
+	rpcServer.chordNode.KeyHashLength = rpcServer.configObject.KeyHashLength
+	rpcServer.chordNode.RelationHashLength = rpcServer.configObject.RelationHashLength
 
 	rpcServer.chordNode.MyServerInfo.ServerID = rpcServer.configObject.ServerID
 	rpcServer.chordNode.MyServerInfo.Protocol = rpcServer.configObject.Protocol
@@ -960,7 +999,7 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 	var succId uint32
 	var interId uint32
 
-	succServerInfo := chord.ServerInfo{}
+	succServerInfo := rpcclient.ServerInfo{}
 
 	var parameters []interface{}
 	parameters = jsonInput.Params
@@ -1022,7 +1061,7 @@ func (rpcMethod *RPCMethod) FindSuccessor(jsonInput RequestParameters, jsonOutpu
 			if response.(*(rpcclient.ResponseParameters)).Result != nil {
 				succId = uint32(response.(*(rpcclient.ResponseParameters)).Result[0].(float64))
 
-				resultServerInfo := chord.ServerInfo{}
+				resultServerInfo := rpcclient.ServerInfo{}
 				for key, value := range response.(*(rpcclient.ResponseParameters)).Result[1].(map[string]interface{}) {
 					switch key {
 					case "serverID":
@@ -1086,7 +1125,7 @@ func (rpcMethod *RPCMethod) GetPredecessor(jsonInput RequestParameters, jsonOutp
 
 	isPredecessorNil, predecessor := rpcMethod.rpcServer.chordNode.GetPredecessor()
 
-	predecessorServerInfo := chord.ServerInfo{}
+	predecessorServerInfo := rpcclient.ServerInfo{}
 	if !isPredecessorNil {
 		predecessorServerInfo = rpcMethod.rpcServer.chordNode.FtServerMapping[predecessor]
 	}
@@ -1120,7 +1159,7 @@ func (rpcMethod *RPCMethod) Notify(jsonInput RequestParameters, jsonOutput *Resp
 	rpcMethod.rpcServer.logger.Println("Input=", jsonInput)
 
 	var probablePredecessorId uint32
-	probablePredecessorServerInfo := chord.ServerInfo{}
+	probablePredecessorServerInfo := rpcclient.ServerInfo{}
 	var parameters []interface{}
 	parameters = jsonInput.Params
 
@@ -1129,7 +1168,7 @@ func (rpcMethod *RPCMethod) Notify(jsonInput RequestParameters, jsonOutput *Resp
 		if k == 0 {
 			probablePredecessorId = uint32(v.(float64))
 		} else if k == 1 {
-			resultServerInfo := chord.ServerInfo{}
+			resultServerInfo := rpcclient.ServerInfo{}
 			for key, value := range v.(map[string]interface{}) {
 				switch key {
 				case "serverID":
