@@ -86,9 +86,9 @@ func (chordNode *ChordNode) InitializeNode() {
 	chordNode.FtServerMapping = make(map[uint32]rpcclient.ServerInfo)
 
 	//initialize predecessor and successor to own ID
-	chordNode.Id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
+	//chordNode.Id = getID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port)
 	
-	//chordNode.Id = getSHAID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port, chordNode.MValue)
+	chordNode.Id = getSHAID(chordNode.MyServerInfo.IpAddress, chordNode.MyServerInfo.Port, chordNode.MValue)
 	
 	
 	chordNode.isPredecessorNil = true
@@ -236,7 +236,7 @@ func (chordNode *ChordNode) stabilize() {
 
 	//RPC call to get predecessor of successor
 	jsonMessage := "{\"method\":\"GetPredecessor\",\"params\":[]}"
-
+	
 	clientServerInfo := rpcclient.ServerInfo{}
 	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.FingerTable[1]].ServerID
 	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.FingerTable[1]].Protocol
@@ -365,7 +365,7 @@ func (chordNode *ChordNode) RunBackgroundProcesses() {
 }
 
 //transfer keys to successor 
-//n may notify its predecessor p and successor s before leaving
+//n has to notify its predecessor p and successor s before leaving
 func (chordNode *ChordNode) NotifyShutDownToRing(){
 	
 	
@@ -466,12 +466,25 @@ func (chordNode *ChordNode)PrepareClientServerInfo(chordID uint32)(rpcclient.Ser
 	
 }
 
+/*
+get hash value from key and relation
+*/
+func (chordNode * ChordNode)GetHashFromKeyAndValue(key ,relation string) uint32{
+
+	//get hash values for key and relation
+	keyHash :=hashing.GetStartingBits(key,chordNode.KeyHashLength)
+	relationHash := hashing.GetStartingBits(relation,chordNode.RelationHashLength)
+	
+	return keyHash<<uint(chordNode.RelationHashLength) | relationHash
+
+}
 
 /*
-get node for forwarding the request 
+get node for forwarding the Insert/InsertOrUpdate/delete call request 
+
 */
 
-func (chordNode * ChordNode)ForwardInsert(reqPar []interface{}) (ServerInfoWithID,error) {
+func (chordNode * ChordNode)ForwardRequest(reqPar []interface{}) (ServerInfoWithID,error) {
 	//Unmarshal into array of interfaces
 	var parameters []interface{}
 	parameters = reqPar
@@ -491,12 +504,8 @@ func (chordNode * ChordNode)ForwardInsert(reqPar []interface{}) (ServerInfoWithI
 	}
 
 
-	//get hash values for key and relation
-	keyHash :=hashing.GetStartingBits(key,chordNode.KeyHashLength)
-	relationHash := hashing.GetStartingBits(relation,chordNode.RelationHashLength)
-	
 	var finalChordID uint32
-	finalChordID = keyHash<<uint(chordNode.RelationHashLength) | relationHash
+	finalChordID = chordNode.GetHashFromKeyAndValue(key ,relation)
 	
 	//findsuccessor for finalChordID
 			
