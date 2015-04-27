@@ -522,14 +522,9 @@ func (chordNode * ChordNode)ForwardRequest(reqPar []interface{}) (ServerInfoWith
                
 	chordNode.Logger.Println(string(jsonBytes))
 	
-	//prepare server info
-	clientServerInfo,err := chordNode.PrepareClientServerInfo(chordNode.FingerTable[1])
-	if err!=nil{
-		chordNode.Logger.Println(err)
-		return ServerInfoWithID{},err
-	}
+	//make FindSuccessor call on the same node - chordNode.MyServerInfo
 	client := &rpcclient.RPCClient{}
-	err, response := client.RpcCall(clientServerInfo, string(jsonBytes))
+	err, response := client.RpcCall(chordNode.MyServerInfo, string(jsonBytes))
 		
 	if err != nil {
 		chordNode.Logger.Println(err)
