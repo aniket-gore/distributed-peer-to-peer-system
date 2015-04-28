@@ -17,6 +17,21 @@ pl will be caled
 
 
 L - will handle merging of the responses from PL
+In case of partial queries: L will call forwardRequestWraper:
+
+forwardRequestWrapper()
+1. create all possible hashes
+2. sort the hashes
+3. for each hash 
+   
+   if(hash < tempSucc)
+      continue
+      
+   tempSucc := findSucc()
+   forwardRequest(tempSucc)
+   
+   
+
 
 response from L
 if partial:
