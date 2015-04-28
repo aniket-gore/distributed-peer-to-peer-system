@@ -1,0 +1,27 @@
+1. Create a partial lookup request to any alive node
+2. The exposed method will hash key/rel and will create all combination of the empty rel/key
+3. There are three methods involved:
+
+L - exposed lookup the client will contact - add function which identify whether full or partial lookup
+l - unexposed actual lookup on both - key and relation
+
+PL - another exposed method - that L will forward requests to
+pl - unexposed lookup called by PL - that will search the db given a key or a relation 
+
+
+if full lookup forward it to another L
+l will be called 
+else if partial forward i to another PL
+pl will be caled 
+
+
+
+L - will handle merging of the responses from PL
+
+response from L
+if partial:
+{“result”: [[“keyA”, “relA”, {“a”:3, “b”:[1,2,3]} ] [“keyA”, “relA”, {“a”:4, “b”:[1,2,3,4]} ]], “error”: null}
+
+
+if full:
+{“result”: [“keyA”, “relA”, {“a”:3, “b”:[1,2,3]} ], “error”: null} 
