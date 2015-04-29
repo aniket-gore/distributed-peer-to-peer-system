@@ -1,0 +1,39 @@
+Value of a triplet:
+{“content”: “any valid JSON string”, “size”: “1KB”, “created”: “3/18/2015, 8:50:26”,
+“modified”: “3/20/2015, 16:40:03”, “accessed”: “3/ 20/2015, 18:09:54”, “permission”:
+“RW”}
+
+
+size - not necessary ?
+created - not necessary ?
+modified - update after writes (Insert/InserOrUpdate)  
+accessed - update after reades (Lookup) - do we update after partial lookup/ListKeys/ListIds as well?
+permission - will be provided by the client
+
+
+
+Changes to RPCs modifying DB
+Insert
+update modified time
+
+InserOrUpdate
+update modified time
+
+Delete
+A client/ring node should be able to purge (delete from) “RW” dictionary triplets that have
+not been accessed since some user specified time.
+
+Shoudnt it be accessed or modified?
+Get User Specified Time - from config file 
+
+Lookup
+Update accessed time
+
+ListKeys
+?
+
+ListIds
+?
+
+Shutdown
+?

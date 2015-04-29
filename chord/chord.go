@@ -440,10 +440,6 @@ func (chordNode *ChordNode) NotifyShutDownToRing(){
 	
 	}//if not predecessor nil
 	
-
-	
-
-	
 }
 
 /*
@@ -479,36 +475,16 @@ func (chordNode * ChordNode)GetHashFromKeyAndValue(key ,relation string) uint32{
 
 }
 
+
+
 /*
 get node for forwarding the Insert/InsertOrUpdate/delete call request 
 
 */
 
-func (chordNode * ChordNode)ForwardRequest(reqPar []interface{}) (ServerInfoWithID,error) {
-	//Unmarshal into array of interfaces
-	var parameters []interface{}
-	parameters = reqPar
-
-	//Use dict3 struct to unmarshall
-	var key string
-	var relation string
-	for k, v := range parameters {
-	
-		if k == 0 {
-			key = v.(string)
-		} else if k == 1 {
-			relation = v.(string)
-		} else if k == 2 {
-			//dict3.Value = v
-		}
-	}
-
-
-	var finalChordID uint32
-	finalChordID = chordNode.GetHashFromKeyAndValue(key ,relation)
-	
+func (chordNode * ChordNode)GetSuccessorInfoForInputHash(finalChordID uint32) (ServerInfoWithID,error) {
 	//findsuccessor for finalChordID
-			
+	
 	//create json message
 	jsonMessage := rpcclient.RequestParameters{}
 	jsonMessage.Method = "findSuccessor";
@@ -525,12 +501,12 @@ func (chordNode * ChordNode)ForwardRequest(reqPar []interface{}) (ServerInfoWith
 	//make FindSuccessor call on the same node - chordNode.MyServerInfo
 	client := &rpcclient.RPCClient{}
 	err, response := client.RpcCall(chordNode.MyServerInfo, string(jsonBytes))
-		
+	
 	if err != nil {
 		chordNode.Logger.Println(err)
 		return ServerInfoWithID{},err
 	}
-		
+	
 	var successorInfo ServerInfoWithID
 	successorInfo.Id = uint32((response.(*(rpcclient.ResponseParameters)).Result[0]).(float64))
 	

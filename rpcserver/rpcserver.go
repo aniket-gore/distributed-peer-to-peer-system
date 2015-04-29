@@ -463,9 +463,28 @@ func (rpcMethod *RPCMethod) Insert(jsonInput RequestParameters, jsonOutput *Resp
 	//response := new(ResponseParameters)
 	response := new(ResponseParametersInsert)
 	
-	//get Successor for the insert
+	/**********************get Successor for the insert**********************/
+	var parameters []interface{}
+	parameters = jsonInput.Params
+
+	//Use dict3 struct to unmarshall
+	var key string
+	var relation string
+	for k, v := range parameters {
+		
+		if k == 0 {
+			key = v.(string)
+		} else if k == 1 {
+			relation = v.(string)
+		} 
+	}
+
+
+	var finalChordID uint32
+	finalChordID = rpcMethod.rpcServer.chordNode.GetHashFromKeyAndValue(key ,relation)
+
 	var successorInfo chord.ServerInfoWithID
-	successorInfo,err = rpcMethod.rpcServer.chordNode.ForwardRequest(jsonInput.Params)
+	successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
 	if err !=nil{
 		rpcMethod.rpcServer.logger.Println(err)
 		return err
@@ -492,7 +511,7 @@ func (rpcMethod *RPCMethod) Insert(jsonInput RequestParameters, jsonOutput *Resp
 		response.Error = responseTemp.(*rpcclient.ResponseParametersInsert).Error
 
 		
-		//get Successor for the insert - ends
+		/*********************get Successor for the insert - ends*********************/
 	}else{
 		
 		//make the actual call on the target successor
@@ -543,9 +562,30 @@ func (rpcMethod *RPCMethod) InsertOrUpdate(jsonInput RequestParameters, jsonOutp
 	rpcMethod.rpcServer.logger.Println(jsonInput.Method)
 
 	response := new(ResponseParameters)
-	//get Successor for the insert
+	
+	/*******************get Successor for the insertorupdate******************/
+	var parameters []interface{}
+	parameters = jsonInput.Params
+
+	//Use dict3 struct to unmarshall
+	var key string
+	var relation string
+	for k, v := range parameters {
+		
+		if k == 0 {
+			key = v.(string)
+		} else if k == 1 {
+			relation = v.(string)
+		} 
+	}
+
+
+	var finalChordID uint32
+	finalChordID = rpcMethod.rpcServer.chordNode.GetHashFromKeyAndValue(key ,relation)
+
 	var successorInfo chord.ServerInfoWithID
-	successorInfo,err = rpcMethod.rpcServer.chordNode.ForwardRequest(jsonInput.Params)
+	successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
+	
 	if err !=nil{
 		rpcMethod.rpcServer.logger.Println(err)
 		return err
@@ -572,7 +612,7 @@ func (rpcMethod *RPCMethod) InsertOrUpdate(jsonInput RequestParameters, jsonOutp
 		response.Error = responseTemp.(*rpcclient.ResponseParameters).Error
 
 		
-		//get Successor for the insert - ends
+		/***************get Successor for the insert - ends*********************/
 	}else{
 	
 		if err := rpcMethod.insertOrUpdate(jsonInput.Params); err != nil {
@@ -625,9 +665,29 @@ func (rpcMethod *RPCMethod) Delete(jsonInput RequestParameters, jsonOutput *Resp
 	rpcMethod.rpcServer.logger.Println(jsonInput.Method)
 
 	response := new(ResponseParameters)
-	//get Successor for the delete
+	/***************************get Successor for the delete***********************/
+	var parameters []interface{}
+	parameters = jsonInput.Params
+
+	//Use dict3 struct to unmarshall
+	var key string
+	var relation string
+	for k, v := range parameters {
+		
+		if k == 0 {
+			key = v.(string)
+		} else if k == 1 {
+			relation = v.(string)
+		} 
+	}
+
+
+	var finalChordID uint32
+	finalChordID = rpcMethod.rpcServer.chordNode.GetHashFromKeyAndValue(key ,relation)
+
 	var successorInfo chord.ServerInfoWithID
-	successorInfo,err = rpcMethod.rpcServer.chordNode.ForwardRequest(jsonInput.Params)
+	successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
+	
 	if err !=nil{
 		rpcMethod.rpcServer.logger.Println(err)
 		return err
@@ -654,7 +714,7 @@ func (rpcMethod *RPCMethod) Delete(jsonInput RequestParameters, jsonOutput *Resp
 		response.Error = responseTemp.(*rpcclient.ResponseParameters).Error
 
 		
-		//get Successor for the delete - ends
+		/*******************get Successor for the delete - ends**********************/
 	}else{
 	
 		if err := rpcMethod.delete(jsonInput.Params); err != nil {
@@ -1497,5 +1557,106 @@ func (rpcServer * RPCServer)makeInsertsToSuccessor(){
 		return nil
 	})
 
+}
+
+//called by lookup
+func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestParameters) (error, ResponseParameters) {
+
+	var response ResponseParameters
+	var parameters []interface{}
+	parameters = jsonInput.Params
+	var  isPartialQuery bool
+	isPartialQuery = false
+	var err error
+	//Use dict3 struct to unmarshall
+	var key string
+	var relation string
+	for k, v := range parameters {
+	
+		if k == 0 {
+			key = v.(string)
+			if key == ""{
+				isPartialQuery = true
+			}
+		} else if k == 1 {
+			relation = v.(string)
+			
+			if relation == ""{
+				isPartialQuery = true
+			}
+		} 
+	}
+
+	//if it is a partial query call partialForwardRequestWrapper
+	if isPartialQuery {
+		//GetSuccessorInfoForInputHashWrapper(key,relation)
+	}else{
+		
+	
+		/**********************get Successor for the lnsert**********************/
+		var parameters []interface{}
+		parameters = jsonInput.Params
+		
+		//Use dict3 struct to unmarshall
+		var key string
+		var relation string
+		for k, v := range parameters {
+			
+			if k == 0 {
+				key = v.(string)
+			} else if k == 1 {
+				relation = v.(string)
+			} 
+		}
+		
+		
+		var finalChordID uint32
+		finalChordID = rpcMethod.rpcServer.chordNode.GetHashFromKeyAndValue(key ,relation)
+		
+		var successorInfo chord.ServerInfoWithID
+		successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
+	
+		if err !=nil{
+			rpcMethod.rpcServer.logger.Println(err)
+			return err,ResponseParameters{}
+		}
+		//for the target successor  - ID returned will be the same as chordNode.Id
+		if successorInfo.Id != rpcMethod.rpcServer.chordNode.Id{
+			
+			jsonBytes,err :=json.Marshal(jsonInput)
+			if err!=nil{
+				rpcMethod.rpcServer.logger.Println(err)
+				return err,ResponseParameters{}
+			} 
+			
+			var responseTemp interface{}
+			client := &rpcclient.RPCClient{}
+			err, responseTemp = client.RpcCall(successorInfo.ServerInfo, string(jsonBytes))
+			
+			if err != nil {
+				rpcMethod.rpcServer.logger.Println(err)
+				return nil,ResponseParameters{}
+			}
+			
+			response.Result = responseTemp.(*rpcclient.ResponseParameters).Result
+			response.Error = responseTemp.(*rpcclient.ResponseParameters).Error
+
+			return nil,response
+			/********************get Successor for the lookup - ends*********************/
+		}else{
+			
+			//make the actual call on the target successor
+			if err := rpcMethod.lookup(jsonInput.Params, &response); err != nil {
+				rpcMethod.rpcServer.logger.Println(err)
+				response.Result = nil
+				response.Error = 1
+			}
+			
+			return nil,response
+		}//end else - if target successor
+		
+	}//end else not partial query 
+
+	return nil,ResponseParameters{}
 }
 /*****************************Chord related functions**************************************************/

@@ -2,8 +2,8 @@
 2. The exposed method will hash key/rel and will create all combination of the empty rel/key
 3. There are three methods involved:
 
-L - exposed lookup the client will contact - add function which identify whether full or partial lookup
-l - unexposed actual lookup on both - key and relation
+L - exposed lookup the client will contact - add function which identify whether full or partial lookup - done
+l - unexposed actual lookup on both - key and relation - done
 
 PL - another exposed method - that L will forward requests to
 pl - unexposed lookup called by PL - that will search the db given a key or a relation 
@@ -17,9 +17,9 @@ pl will be caled
 
 
 L - will handle merging of the responses from PL
-In case of partial queries: L will call forwardRequestWraper:
+In case of partial queries: L will call GetSuccessorInfoForInputHashWrapper:
 
-forwardRequestWrapper()
+GetSuccessorInfoForInputHashWrapper()
 1. create all possible hashes
 2. sort the hashes
 3. for each hash 
@@ -27,8 +27,8 @@ forwardRequestWrapper()
    if(hash < tempSucc)
       continue
       
-   tempSucc := findSucc()
-   forwardRequest(tempSucc)
+   tempSucc := GetSuccessorInfoForInputHash(hash)
+   
    
    
 
