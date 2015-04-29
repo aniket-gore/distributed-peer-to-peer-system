@@ -1590,6 +1590,87 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 	//if it is a partial query call partialForwardRequestWrapper
 	if isPartialQuery {
 		//GetSuccessorInfoForInputHashWrapper(key,relation)
+		// vvvvvvvvvvvvv  BEING WORKED BY SID vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+		if key == "" {																		// if empty key
+			relationHash := rpcMethod.rpcServer.chordNode.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
+																							// get relation hash
+			keyHash := 0 																	// set first key hash to 0
+			finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
+																							// concatenate
+			var successorInfo chord.ServerInfoWithID
+			successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
+			if err != nil{
+				rpcMethod.rpcServer.logger.Println(err)
+				return err,ResponseParameters{}
+			}
+
+			firstSuccessorId := successorInfo.Id 											// make note of
+			var msb uint32
+			var lsb uint32
+
+			for {																			// do forever
+				//forwardRequest to successorInfo 											// forward partial query
+				msb = rpcMethod.rpcServer.chordNode.Id/uint(rpcMethod.rpcServer.chordNode.RelationHashLength)
+											// get most significant bits of chordNode Id, corresponding to key hash
+				lsb = rpcMethod.rpcServer.chordNode.Id
+											// get least significant bits of chordNode Id, corresponding to relation hash
+				if lsb < relationHash {
+					keyHash = msb			// only have to set the least significant bits to relationHash for next iter
+				}else{
+					keyHash = msb + 1 		// if greater than or equal, have to increment mostSignificant
+				}
+				finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
+																							// concatenate
+				successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
+				if err != nil{
+					rpcMethod.rpcServer.logger.Println(err)
+					return err,ResponseParameters{}
+			}
+				if successorInfo.Id = firstSuccessorId {
+					break
+				}
+			}
+		}else{								// empty relation
+			keyHash := rpcMethod.rpcServer.chordNode.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.KeyHashLength)	
+																							// get key hash
+			relationHash := 0 																// set first relation hash to 0
+			finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
+																							// concatenate
+			var successorInfo chord.ServerInfoWithID
+			successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
+			if err != nil{
+				rpcMethod.rpcServer.logger.Println(err)
+				return err,ResponseParameters{}
+			}
+
+			firstSuccessorId := successorInfo.Id 											// make note of
+			var msb uint32
+			var lsb uint32
+
+			for {																			// do forever
+				//forwardRequest to successorInfo 											// forward partial query
+				msb = rpcMethod.rpcServer.chordNode.Id/uint(rpcMethod.rpcServer.chordNode.RelationHashLength)
+											// get most significant bits of chordNode Id, corresponding to key hash
+				lsb = rpcMethod.rpcServer.chordNode.Id
+											// get least significant bits of chordNode Id, corresponding to relation hash
+				if msb != keyHash {
+					break					// if msb is not keyHash, all relevant values were retrieved from this node
+				}else{
+					relationHash = lsb + 1 	// else increment lsb to get next relevant hash
+				}
+				finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
+																							// concatenate
+				successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
+				if err != nil{
+					rpcMethod.rpcServer.logger.Println(err)
+					return err,ResponseParameters{}
+			}
+				if successorInfo.Id = firstSuccessorId {
+					break					// corner case
+				}
+			}		
+		}
+		// ^^^^^^^^^^^^^  BEING WORKED BY SID ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 	}else{
 		
 	
