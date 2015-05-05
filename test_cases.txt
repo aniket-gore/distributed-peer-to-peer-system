@@ -1,0 +1,18 @@
+{"method" : "Lookup", "params": ["keyA", "relA"], "id":1}
+{"method" : "Insert", "params": ["keyA", "relA", { "a": 1, "b": 2}], "id":2}
+{"method" : "Lookup", "params": ["keyA", "relA"], "id":3}
+{"method" : "InsertOrUpdate", "params": ["keyA", "relA", { "a": 1, "b": [1, 2, "bc"] }], "id":4}
+{"method" : "Lookup", "params": ["keyA", "relA"], "id":5}
+{"method" : "Insert", "params": ["keyA", "relA", { "a": 1, "b": 2}], "id":6}
+{"method" : "Lookup", "params": ["keyA", "relA"], "id":7}
+{"method" : "Insert", "params": ["keyA", "relB", { "a": 1, "b": 2, "c": 3}], "id":8}
+{"method" : "Insert", "params": ["keyA", "relC", { "a": 1, "b": 2, "c": 4}], "id":9}
+{"method" : "Insert", "params": ["keyB", "relC", { "a": 2, "b": 2, "c": 3}], "id":10}
+{"method" : "Insert", "params": ["keyB", "relA", { "a": 2, "b": 2, "c": 4}], "id":11}
+{"method" : "ListKeys", "params": [], "id":671}
+{"method" : "ListIDs", "params": [], "id":672}
+{"method" : "Delete", "params": ["keyA", "relA"], "id":673}
+{"method" : "Shutdown", "params": [], "id":674}
+{"method" : "Insert", "params": ["keyA", "relA", { "a": 1, "b": 2}], "id":675}
+{"method" : "Insert", "params": ["keyA", "relA", { "a": 1, "b": 2}], "id":676}
+{"method" : "Insert", "params": ["keyA", "relA", { "a": 1, "b": 2}], "id":677}
