@@ -173,6 +173,7 @@ func (client *RPCClient) CreateAsyncRPC(jsonMessage string, serverName string) e
 func (client *RPCClient) ProcessReply() (error, interface{}) {
 
 	defer client.connection.Close()
+
 	var rp interface{}
 	//should take timeout as config argument
 	var timeout <-chan time.Time

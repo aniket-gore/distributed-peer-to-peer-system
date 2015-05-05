@@ -3,6 +3,7 @@ package rpcserver
 import (
 	"621_proj/chord"
 	"621_proj/rpcclient"
+	"621_proj/hashing"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,7 +16,19 @@ import (
 	"os"
 	"strconv"
 	"sync"
+	"time"
+	"bytes"
 )
+
+type TripletValueWrapper struct{
+	Content string `json:"content"`
+	Size int `json:"size,omitempty"`
+	Created time.Time `json:"created,omitempty"`
+	Modified time.Time `json:"modified,omitempty"`
+	Accessed time.Time `json:"acessed,omitempty"`
+	Permission string `json:"permission"`
+	
+}
 
 type Dict3 struct {
 	Key      string
@@ -27,6 +40,7 @@ type RequestParameters struct {
 	Method string        `json:"method,omitempty"`
 	Params []interface{} `json: "params"`
 	Id     int           `json: "id,omitempty"`
+
 }
 
 type ResponseParameters struct {
@@ -358,6 +372,108 @@ func (rpcMethod *RPCMethod) listIDs(response *ResponseParameters) error {
 	return nil
 
 }
+
+
+func (rpcMethod *RPCMethod) partialLookup(reqPar []interface{}, response *ResponseParameters) error {
+
+	var parameters []interface{}
+	parameters = reqPar
+
+	//Use dict3 struct to unmarshall
+	dict3 := Dict3{}
+	// Key string
+	// Relation string
+	// Value interface{}
+
+	for k, v := range parameters {
+		rpcMethod.rpcServer.logger.Println(k, v)
+		if k == 0 {
+			dict3.Key = v.(string)
+		} else if k == 1 {
+			dict3.Relation = v.(string)
+		}
+	}
+	
+	//response is an array of dict3
+	response.Result = make([]interface{}, 0, 10)
+		
+	
+	//Read value from db
+	var keyPresent bool
+	var dict3Value []byte
+	
+	
+	//if key not null
+	if dict3.Key != ""{
+		rpcMethod.rpcServer.boltDB.View(func(tx *bolt.Tx) error {
+			b := tx.Bucket([]byte(dict3.Key))
+			
+			b.ForEach(func(rel, v []byte) error {
+				//fmt.Printf("key=%s, value=%s\n", k, v)
+				partialDict3 := Dict3{}
+				partialDict3.Key = dict3.Key
+				partialDict3.Relation = string(rel)
+				if err := json.Unmarshal(v, &(partialDict3.Value)); err != nil {
+					
+					rpcMethod.rpcServer.logger.Println("Value Unmarshalling error ", err, " for id: ", partialDict3.Key, " ", partialDict3.Relation)
+					
+				}
+				
+				
+				response.Result = append(response.Result,partialDict3)
+				return nil
+			})
+			return nil
+		})
+		//else if relation not null
+	}else if dict3.Relation!=""{
+		//open a read transaction
+		rpcMethod.rpcServer.boltDB.View(func(tx *bolt.Tx) error {
+			var cursor *bolt.Cursor
+			cursor = tx.Cursor()
+			//iterate over each bucket (key)	
+			for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
+		
+				c := tx.Bucket(k).Cursor()
+
+				//search in the bucket(key) with the given relation as partial prefix 
+				//faster than a sequential search
+				prefix := []byte(dict3.Relation)
+				for rel, v := c.Seek(prefix); bytes.HasPrefix(rel, prefix); rel, v = c.Next() {
+					
+					//check if the partial prefix is equal to the input relation
+					if string(rel)!=dict3.Relation{
+						continue
+					}
+					
+					partialDict3 := Dict3{}
+					partialDict3.Key = string(k)
+					partialDict3.Relation = string(rel)
+				if err := json.Unmarshal(v, &(partialDict3.Value)); err != nil {
+					
+					rpcMethod.rpcServer.logger.Println("Value Unmarshalling error ", err, " for id: ", partialDict3.Key, " ", partialDict3.Relation)
+					
+				}
+				
+				
+				response.Result = append(response.Result,partialDict3)
+					
+				}
+			}
+			
+			return nil
+		})
+		
+	}
+	
+	
+	response.Error = nil
+
+	
+	return nil
+}
+
+
 
 func (rpcMethod *RPCMethod) lookup(reqPar []interface{}, response *ResponseParameters) error {
 
@@ -907,6 +1023,56 @@ func (rpcMethod *RPCMethod) ListIDs(jsonInput RequestParameters, jsonOutput *Res
 	return nil
 
 }
+
+//wrapper to partialLookup
+func (rpcMethod *RPCMethod) PartialLookup(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+	//Initialize rpcserver
+	var err error
+	err, rpcMethod.rpcServer = GetRPCServerInstance()
+	var customError error
+	if err != nil {
+		customError = errors.New("Getting Server Instance error :" + err.Error())
+		rpcMethod.rpcServer.logger.Println(customError)
+		return customError
+	}
+
+	rpcMethod.rpcServer.wgLock.Lock()
+	rpcMethod.rpcServer.wg.Add(1)
+	rpcMethod.rpcServer.wgLock.Unlock()
+
+	defer rpcMethod.rpcServer.routineDone()
+	rpcMethod.rpcServer.logger.Println(jsonInput)
+
+	response := new(ResponseParameters)
+
+	if err := rpcMethod.partialLookup(jsonInput.Params, response); err != nil {
+		rpcMethod.rpcServer.logger.Println(err)
+		response.Result = nil
+		response.Error = 1
+
+	}
+
+	//just set ID over here
+	//the rest response is set by respective method
+	//inserOrUpdate / delete / shutdown does not return anything
+	if response != nil {
+		response.Id = jsonInput.Id
+		*jsonOutput = *response
+
+		rpcMethod.rpcServer.logger.Println("json output: ", *jsonOutput)
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.Encode(*jsonOutput)
+
+	} else {
+
+		*jsonOutput = ResponseParameters{Result: nil, Id: -1, Error: nil}
+
+	}
+
+	return nil
+
+}
+
 
 //wrapper to lookup
 func (rpcMethod *RPCMethod) Lookup(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
@@ -1592,11 +1758,11 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 		//GetSuccessorInfoForInputHashWrapper(key,relation)
 		// vvvvvvvvvvvvv  BEING WORKED BY SID vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 		if key == "" {																		// if empty key
-			relationHash := rpcMethod.rpcServer.chordNode.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
-																							// get relation hash
+			relationHash := hashing.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
+			// get relation hash
 			keyHash := 0 																	// set first key hash to 0
 			finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
-																							// concatenate
+			// concatenate
 			var successorInfo chord.ServerInfoWithID
 			successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
 			if err != nil{
@@ -1611,31 +1777,31 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 			for {																			// do forever
 				//forwardRequest to successorInfo 											// forward partial query
 				msb = rpcMethod.rpcServer.chordNode.Id/uint(rpcMethod.rpcServer.chordNode.RelationHashLength)
-											// get most significant bits of chordNode Id, corresponding to key hash
+				// get most significant bits of chordNode Id, corresponding to key hash
 				lsb = rpcMethod.rpcServer.chordNode.Id
-											// get least significant bits of chordNode Id, corresponding to relation hash
+				// get least significant bits of chordNode Id, corresponding to relation hash
 				if lsb < relationHash {
 					keyHash = msb			// only have to set the least significant bits to relationHash for next iter
 				}else{
 					keyHash = msb + 1 		// if greater than or equal, have to increment mostSignificant
 				}
 				finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
-																							// concatenate
+				// concatenate
 				successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
 				if err != nil{
 					rpcMethod.rpcServer.logger.Println(err)
 					return err,ResponseParameters{}
-			}
+				}
 				if successorInfo.Id = firstSuccessorId {
 					break
 				}
 			}
 		}else{								// empty relation
 			keyHash := rpcMethod.rpcServer.chordNode.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.KeyHashLength)	
-																							// get key hash
+			// get key hash
 			relationHash := 0 																// set first relation hash to 0
 			finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
-																							// concatenate
+			// concatenate
 			var successorInfo chord.ServerInfoWithID
 			successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
 			if err != nil{
@@ -1650,21 +1816,21 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 			for {																			// do forever
 				//forwardRequest to successorInfo 											// forward partial query
 				msb = rpcMethod.rpcServer.chordNode.Id/uint(rpcMethod.rpcServer.chordNode.RelationHashLength)
-											// get most significant bits of chordNode Id, corresponding to key hash
+				// get most significant bits of chordNode Id, corresponding to key hash
 				lsb = rpcMethod.rpcServer.chordNode.Id
-											// get least significant bits of chordNode Id, corresponding to relation hash
+				// get least significant bits of chordNode Id, corresponding to relation hash
 				if msb != keyHash {
 					break					// if msb is not keyHash, all relevant values were retrieved from this node
 				}else{
 					relationHash = lsb + 1 	// else increment lsb to get next relevant hash
 				}
 				finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
-																							// concatenate
+				// concatenate
 				successorInfo,err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
 				if err != nil{
 					rpcMethod.rpcServer.logger.Println(err)
 					return err,ResponseParameters{}
-			}
+				}
 				if successorInfo.Id = firstSuccessorId {
 					break					// corner case
 				}
