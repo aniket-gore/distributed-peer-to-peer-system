@@ -77,6 +77,13 @@ type ConfigType struct {
 	KeyHashLength int `json: "keyHashLength"`
 	RelationHashLength int `json: "relationHashLength"`
  
+
+	//config fields to get default serverinfo we would contact
+	ServerIDToContact                   string                  `json:"serverIDToContact"`
+	ProtocolToContact                   string                  `json:"protocolToContact"`
+	IpAddressToContact                  string                  `json: "IpAddressToContact"`
+	PortToContact                       int                     `json: "PortToContact"`
+	
 }
 
 //this struct object will manage the server
@@ -555,6 +562,55 @@ func (rpcMethod *RPCMethod) shutDown() error {
 /*****************************Memory Mapped Persitent FIle Operations using Bolt Ends*******************************/
 
 /*****************************Exposed Wrappers to actual methods start**********************************************/
+func (rpcMethod *RPCMethod) PureInsert(jsonInput RequestParameters, jsonOutput *ResponseParametersInsert) error {
+	//Initialize rpcserver
+	var err error
+	err, rpcMethod.rpcServer = GetRPCServerInstance()
+	var customError error
+	if err != nil {
+		customError = errors.New("Getting Server Instance error :" + err.Error())
+		rpcMethod.rpcServer.logger.Println(customError)
+		return customError
+	}
+
+	rpcMethod.rpcServer.wgLock.Lock()
+	rpcMethod.rpcServer.wg.Add(1)
+	rpcMethod.rpcServer.wgLock.Unlock()
+
+	defer rpcMethod.rpcServer.routineDone()
+	rpcMethod.rpcServer.logger.Println(jsonInput.Method)
+
+	//response := new(ResponseParameters)
+	response := new(ResponseParametersInsert)
+	
+		
+	//make the actual call on the target successor
+	if err := rpcMethod.insert(jsonInput.Params, response); err != nil {
+		rpcMethod.rpcServer.logger.Println(err)
+		response.Result = nil
+		response.Error = 1
+	}
+
+	//just set ID over here
+	//the rest response is set by respective method
+	//inserOrUpdate / delete / shutdown does not return anything
+	if response != nil {
+		response.Id = jsonInput.Id
+		*jsonOutput = *response
+
+		rpcMethod.rpcServer.logger.Println("json output: ", *jsonOutput)
+		encoder := json.NewEncoder(os.Stdout)
+		encoder.Encode(*jsonOutput)
+
+	} else {
+
+		*jsonOutput = ResponseParametersInsert{Result: nil, Id: -1, Error: nil}
+
+	}
+
+	return nil
+
+}
 
 //wrapper to insert
 //func (rpcMethod *RPCMethod) Insert(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
@@ -888,9 +944,17 @@ func (rpcMethod *RPCMethod) Shutdown(jsonInput RequestParameters, jsonOutput *Re
 	rpcMethod.rpcServer.chordNode.NotifyShutDownToRing();
 	
 
-	//transfer keys to successor 
-	rpcMethod.rpcServer.makeInsertsToSuccessor()
+	//transfer keys to successor if successor not set to itself
+	if rpcMethod.rpcServer.chordNode.FingerTable[1] != rpcMethod.rpcServer.chordNode.Id{
+		rpcMethod.rpcServer.makeInsertsToSuccessor()
+		//delete all buckets from own DB
+		rpcMethod.rpcServer.deleteAllBuckets()
+
+	}
+
 	
+	
+
 
 	response := new(ResponseParameters)
 
@@ -1095,12 +1159,27 @@ func (rpcMethod *RPCMethod) Lookup(jsonInput RequestParameters, jsonOutput *Resp
 
 	response := new(ResponseParameters)
 
+	var responseTemp interface{}
+			
+	/*
 	if err := rpcMethod.lookup(jsonInput.Params, response); err != nil {
 		rpcMethod.rpcServer.logger.Println(err)
 		response.Result = nil
 		response.Error = 1
 
 	}
+*/
+	
+	err, responseTemp = rpcMethod.checkIfPartialAndForwardRequest(jsonInput)
+		
+	if err != nil {
+		rpcMethod.rpcServer.logger.Println(err)
+		return err
+	}
+		
+	response.Result = responseTemp.(ResponseParameters).Result
+	response.Error = responseTemp.(ResponseParameters).Error
+
 
 	//just set ID over here
 	//the rest response is set by respective method
@@ -1161,6 +1240,25 @@ func (rpcServer *RPCServer) InitializeServerConfig(inputConfigObject ConfigType)
 	return nil
 }
 
+func (rpcServer *RPCServer) deleteAllBuckets(){
+	
+	//open a read transaction
+	rpcServer.boltDB.Update(func(tx *bolt.Tx) error {
+		var cursor *bolt.Cursor
+		cursor = tx.Cursor()
+
+		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
+			if err:=tx.DeleteBucket(k); err!=nil  {
+				rpcServer.logger.Println(err)
+			}
+			
+		}
+
+		return nil
+	})
+
+}
+
 func (rpcServer *RPCServer) closeServerAndDB(listener net.Listener) error {
 	<-rpcServer.stopChan
 
@@ -1174,6 +1272,8 @@ func (rpcServer *RPCServer) closeServerAndDB(listener net.Listener) error {
 
 	//once all connections are served close db and return
 	rpcServer.boltDB.Close()
+
+	
 	fmt.Println("Server Connection closing")
 	fmt.Println("DB Connection closing")
 	var err error
@@ -1259,6 +1359,12 @@ func (rpcServer *RPCServer) InitializeChordNode() {
 	rpcServer.chordNode.MyServerInfo.IpAddress = rpcServer.configObject.IpAddress
 	rpcServer.chordNode.MyServerInfo.Port = rpcServer.configObject.Port
 
+
+	rpcServer.chordNode.ToContactServerInfo.ServerID = rpcServer.configObject.ServerIDToContact
+	rpcServer.chordNode.ToContactServerInfo.Protocol = rpcServer.configObject.ProtocolToContact
+	rpcServer.chordNode.ToContactServerInfo.IpAddress = rpcServer.configObject.IpAddressToContact
+	rpcServer.chordNode.ToContactServerInfo.Port = rpcServer.configObject.PortToContact
+	
 	rpcServer.chordNode.InitializeNode()
 	rpcServer.chordNode.RunBackgroundProcesses()
 
@@ -1488,12 +1594,11 @@ func (rpcMethod *RPCMethod) Notify(jsonInput RequestParameters, jsonOutput *Resp
 		predecessor == nodeId ||
 		(probablePredecessorId < nodeId && predecessor > probablePredecessorId && predecessor > nodeId) ||
 		(probablePredecessorId > nodeId && predecessor < probablePredecessorId && predecessor > nodeId) {
-
+		
+		rpcMethod.rpcServer.logger.Println("New Predecessor or Predecessor change - setPredecessor")
 		rpcMethod.rpcServer.chordNode.SetPredecessor(false, probablePredecessorId)
 		rpcMethod.rpcServer.chordNode.FtServerMapping[rpcMethod.rpcServer.chordNode.Predecessor] = probablePredecessorServerInfo
 
-		//transfer keys to predecessor whose hash is less than predecessor chord ID
-		rpcMethod.rpcServer.transferKeysToPredecessor()
 	}
 
 	return nil
@@ -1517,6 +1622,7 @@ request <-"{"method":"PredecessorLeft","params":[PredecessorServerinfo_object]}"
 response <- "{"result":[true],"id":,"error":null }"
 */
 func (rpcMethod * RPCMethod) PredecessorLeft(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+	
 	//Initialize rpcserver
 	var err error
 	err, rpcMethod.rpcServer = GetRPCServerInstance()
@@ -1536,11 +1642,16 @@ func (rpcMethod * RPCMethod) PredecessorLeft(jsonInput RequestParameters, jsonOu
 	if err = json.Unmarshal(serverInfoBytes,&newPredecessor); err!=nil{
 		rpcMethod.rpcServer.logger.Println(err)
 	}
-
+	rpcMethod.rpcServer.logger.Println("In PredecessorLeft")
 	rpcMethod.rpcServer.logger.Println(string(serverInfoBytes))
-	rpcMethod.rpcServer.chordNode.SetPredecessor(false,newPredecessor.Id)
-	rpcMethod.rpcServer.chordNode.FtServerMapping[newPredecessor.Id]=newPredecessor.ServerInfo
+	//if newPredecessor.Id != own id  
+	if newPredecessor.Id!= rpcMethod.rpcServer.chordNode.Id{
+		rpcMethod.rpcServer.chordNode.SetPredecessor(false,newPredecessor.Id)
+		rpcMethod.rpcServer.chordNode.FtServerMapping[newPredecessor.Id]=newPredecessor.ServerInfo
+	}else{
+		rpcMethod.rpcServer.chordNode.SetPredecessor(true,0)
 	
+	}
 	//response
 	jsonOutput.Result = make([]interface{}, 1)
 	jsonOutput.Result[0] = true
@@ -1574,6 +1685,7 @@ func (rpcMethod * RPCMethod) SuccessorLeft(jsonInput RequestParameters, jsonOutp
 	if err = json.Unmarshal(serverInfoBytes,&newSuccessor); err!=nil{
 		rpcMethod.rpcServer.logger.Println(err)
 	}
+	rpcMethod.rpcServer.logger.Println("In SuccessorLeft")
 	rpcMethod.rpcServer.logger.Println(string(serverInfoBytes))
 
 	rpcMethod.rpcServer.chordNode.Successor = newSuccessor.Id
@@ -1589,83 +1701,13 @@ func (rpcMethod * RPCMethod) SuccessorLeft(jsonInput RequestParameters, jsonOutp
 }
 
 /*
-Called in Notify - successor transfers keys to predecessor 
-condition to transfer - key relation hash less than predecessor  
-*/
-
-func (rpcServer * RPCServer)transferKeysToPredecessor(){
-	//open a read transaction
-	rpcServer.boltDB.View(func(tx *bolt.Tx) error {
-		var cursor *bolt.Cursor
-		cursor = tx.Cursor()
-		
-		var bucket *bolt.Bucket
-		
-
-		//traverse through all keys
-		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
-			bucket = tx.Bucket(k)
-			
-			//traverse through all relation and value pairs
-			bucket.ForEach(func(relation, value []byte) error {
-				//create paramter - successor
-			
-				//add to array of interface
-				
-				parameterArray := make([]interface{},3)
-				parameterArray[0] = string(k)
-				parameterArray[1] = string(relation)
-				parameterArray[2] = string(value)
-				
-				//if hash value less than predecessor value - then only insert
-				keyRelationHash := rpcServer.chordNode.GetHashFromKeyAndValue(string(k),string(relation));
-				if keyRelationHash > rpcServer.chordNode.Predecessor{
-					return nil
-				} 
-
-				//create json message
-				jsonMessage := rpcclient.RequestParameters{}
-				jsonMessage.Method = "Insert";
-				jsonMessage.Params = parameterArray
-				
-				jsonBytes,err :=json.Marshal(jsonMessage)
-				if err!=nil{
-					rpcServer.logger.Println(err)
-					return err
-				} 
-               
-				rpcServer.logger.Println(string(jsonBytes))
-
-				clientServerInfo,err := rpcServer.chordNode.PrepareClientServerInfo(rpcServer.chordNode.Predecessor)
-				if err!=nil{
-					
-					rpcServer.logger.Println(err)
-					return nil
-					
-				}
-				client := &rpcclient.RPCClient{}
-				err, _ = client.RpcCall(clientServerInfo, string(jsonBytes))
-				
-				if err != nil {
-					rpcServer.logger.Println(err)
-					return nil
-				}
-				
-				
-				return nil
-			})
-		}
-		return nil
-	})
-
-}
-
-/*
 Called in Shutdown - keys are transferred to successor
 */
 func (rpcServer * RPCServer)makeInsertsToSuccessor(){
+
+
 	//open a read transaction
-	rpcServer.boltDB.View(func(tx *bolt.Tx) error {
+	rpcServer.boltDB.Update(func(tx *bolt.Tx) error {
 		var cursor *bolt.Cursor
 		cursor = tx.Cursor()
 		
@@ -1685,14 +1727,19 @@ func (rpcServer * RPCServer)makeInsertsToSuccessor(){
 				parameterArray := make([]interface{},3)
 				parameterArray[0] = string(k)
 				parameterArray[1] = string(relation)
-				parameterArray[2] = string(value)
+				if err := json.Unmarshal(value,&parameterArray[2]);err!=nil{
+					rpcServer.logger.Println(err)
+					return nil
+
+				}
 				
 
 				//create json message
 				jsonMessage := rpcclient.RequestParameters{}
-				jsonMessage.Method = "Insert";
+				jsonMessage.Method = "PureInsert";
 				jsonMessage.Params = parameterArray
 				
+				var jsonBytes []byte
 				jsonBytes,err :=json.Marshal(jsonMessage)
 				if err!=nil{
 					rpcServer.logger.Println(err)
@@ -1717,9 +1764,15 @@ func (rpcServer * RPCServer)makeInsertsToSuccessor(){
 				}
 				
 				
+				//delete the relation value pair
+				if err = bucket.Delete(relation); err!=nil{
+					rpcServer.logger.Println(err)
+					
+				}
+
 				return nil
-			})
-		}
+			})//end inner function
+		}//end for
 		return nil
 	})
 
@@ -1906,4 +1959,135 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 
 	return nil,ResponseParameters{}
 }
+
+
+/*
+Transfer keys from current node to requesting node (new join of requestin node)
+request <-"{"method":"TransferKeysAfterJoin","params":[RequesterServerinfo_object]}"
+response <- "{"result":[true],"id":,"error":null }"
+*/
+func (rpcMethod * RPCMethod) TransferKeysAfterJoin(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+	rpcMethod.rpcServer.logger.Println("TransferKeysAfterJoin")
+
+	//Initialize rpcserver
+	var err error
+	err, rpcMethod.rpcServer = GetRPCServerInstance()
+	var customError error
+	if err != nil {
+		customError = errors.New("Getting Server Instance error :" + err.Error())
+		rpcMethod.rpcServer.logger.Println(customError)
+		return customError
+	}
+
+
+	//get inputId from the []interface
+	var chordNodeToSend chord.ServerInfoWithID 
+	//again marshal and unmarshal - reason it was getting marshalled into map[string]interface{}
+	serverInfoBytes,_ := json.Marshal(jsonInput.Params[0])
+	if err = json.Unmarshal(serverInfoBytes,&chordNodeToSend); err!=nil{
+		rpcMethod.rpcServer.logger.Println(err)
+	}
+
+	
+	rpcMethod.rpcServer.transferKeysToRequestingNode(chordNodeToSend)
+	return nil
+}
+
+
+/*
+Called in TransferKeysAfterJoin - successor transfers keys to requesting node  
+condition to transfer - key relation hash less than requesting node  
+*/
+
+func (rpcServer * RPCServer)transferKeysToRequestingNode(chordNodeToSend chord.ServerInfoWithID){
+	//open a read transaction
+	rpcServer.logger.Println("In transferKeysToRequestingNode")
+	rpcServer.boltDB.Update(func(tx *bolt.Tx) error {
+		var cursor *bolt.Cursor
+		cursor = tx.Cursor()
+		
+		var bucket *bolt.Bucket
+		
+		var clientServerInfo rpcclient.ServerInfo
+		clientServerInfo.ServerID = chordNodeToSend.ServerInfo.ServerID
+		clientServerInfo.Protocol = chordNodeToSend.ServerInfo.Protocol
+		clientServerInfo.IpAddress = chordNodeToSend.ServerInfo.IpAddress
+		clientServerInfo.Port = chordNodeToSend.ServerInfo.Port
+	
+		//traverse through all keys
+		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
+			bucket = tx.Bucket(k)
+			
+			//traverse through all relation and value pairs
+			bucket.ForEach(func(relation, value []byte) error {
+				//create paramter - successor
+			
+				//add to array of interface
+				
+				parameterArray := make([]interface{},3)
+				parameterArray[0] = string(k)
+				parameterArray[1] = string(relation)
+				if err := json.Unmarshal(value,&parameterArray[2]);err!=nil{
+					rpcServer.logger.Println(err)
+					return nil
+				}
+
+				
+				//if hash value less than predecessor value - then only insert
+				keyRelationHash := rpcServer.chordNode.GetHashFromKeyAndValue(string(k),string(relation));
+				rpcServer.logger.Println("The requesting node:")
+				rpcServer.logger.Print(chordNodeToSend.Id)
+				rpcServer.logger.Println("Key relation hash:")
+				rpcServer.logger.Print(keyRelationHash)
+				rpcServer.logger.Println("Current node id:")
+				rpcServer.logger.Print(rpcServer.chordNode.Id)
+				
+				//keyRelationHash lies between chordNodeToSend and  chordNode.Id then skip
+				if chordNodeToSend.Id < rpcServer.chordNode.Id{
+					if keyRelationHash > chordNodeToSend.Id && keyRelationHash <= rpcServer.chordNode.Id{
+						return nil
+					} 
+				}else{
+					if keyRelationHash <= chordNodeToSend.Id || keyRelationHash > rpcServer.chordNode.Id{
+						return nil
+					} 
+				
+				}
+				
+				//create json message
+				jsonMessage := rpcclient.RequestParameters{}
+				jsonMessage.Method = "PureInsert";
+				jsonMessage.Params = parameterArray
+				
+				
+				jsonBytes,err :=json.Marshal(jsonMessage)
+				if err!=nil{
+					rpcServer.logger.Println(err)
+					return err
+				} 
+               
+				rpcServer.logger.Println(string(jsonBytes))
+
+				client := &rpcclient.RPCClient{}
+				err, _ = client.RpcCall(clientServerInfo, string(jsonBytes))
+				
+				if err != nil {
+					rpcServer.logger.Println(err)
+					return nil
+				}
+				rpcServer.logger.Println("Deleting key:" + string(k) + " and relation:" + string(relation))
+				//delete the relation value pair
+				if err = bucket.Delete(relation); err!=nil{
+					rpcServer.logger.Println(err)
+				
+				}
+				
+				return nil
+			})
+		}
+		return nil
+	})
+
+}
+
 /*****************************Chord related functions**************************************************/

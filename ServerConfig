@@ -5,9 +5,14 @@
 	"Port":1234,
 	"persistentStorageContainer":{"file":"bolt_test.txt"},
 	"Methods":["lookup","insert","insertOrUpdate","delete","listKeys","listIDs","shutdown"],
-	"mvalue" : 32,
+	"mvalue" : 4,
 	"firstnode": 1,
 	"loggerName": "mainNode.txt",
-	"keyHashLength": 16, 
-	"relationHashLength": 16
+	"keyHashLength": 2, 
+	"relationHashLength": 2,
+	"serverIDToContact":"server1",
+	"protocolToContact":"tcp",
+	"IpAddressToContact":"127.0.0.1",
+	"PortToContact":1235
+
 }

@@ -158,7 +158,7 @@ func (client *RPCClient) CreateAsyncRPC(jsonMessage string, serverName string) e
 	//encoder.Encode(reqPar)
 	var response interface{}
 
-	if rpcFunction == "Insert" {
+	if rpcFunction == "Insert" || rpcFunction == "PureInsert" {
 		response = new(ResponseParametersInsert)
 	} else {
 		response = new(ResponseParameters)
