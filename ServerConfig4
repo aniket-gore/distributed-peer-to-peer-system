@@ -1,18 +1,18 @@
 {
-	"serverID":"mainserver",
+	"serverID":"server4",
 	"protocol":"tcp",
 	"IpAddress":"127.0.0.1",
-	"Port":1234,
-	"persistentStorageContainer":{"file":"bolt_test.txt"},
+	"Port":1238,
+	"persistentStorageContainer":{"file":"bolt_test_4.txt"},
 	"Methods":["lookup","insert","insertOrUpdate","delete","listKeys","listIDs","shutdown"],
 	"mvalue" : 4,
-	"firstnode": 1,
-	"loggerName": "mainNode.txt",
+	"firstnode": 0,
+	"loggerName": "server4.txt",
 	"keyHashLength": 2, 
 	"relationHashLength": 2,
-	"serverIDToContact":"server2",
+	"serverIDToContact":"mainserver",
 	"protocolToContact":"tcp",
 	"IpAddressToContact":"127.0.0.1",
-	"PortToContact":1236
+	"PortToContact":1234
 
 }

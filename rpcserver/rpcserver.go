@@ -1,5 +1,6 @@
 package rpcserver
 
+
 import (
 	"621_proj/chord"
 	"621_proj/rpcclient"
@@ -20,20 +21,23 @@ import (
 	"bytes"
 )
 
-type TripletValueWrapper struct{
-	Content string `json:"content"`
-	Size int `json:"size,omitempty"`
-	Created time.Time `json:"created,omitempty"`
-	Modified time.Time `json:"modified,omitempty"`
-	Accessed time.Time `json:"acessed,omitempty"`
-	Permission string `json:"permission"`
-	
+const createdStr = "CREATED"
+const accessedStr = "ACCESSED"
+const modifiedStr = "MODIFIED"
+
+
+type ValueWrapper struct{
+	Content interface{} `json:"content"`
+	Created * time.Time `json:"created,omitempty"`
+	Modified * time.Time `json:"modified,omitempty"`
+	Accessed * time.Time `json:"acessed,omitempty"`
+	Permission string `json:"permission,omitempty"`
 }
 
 type Dict3 struct {
 	Key      string
 	Relation string
-	Value    interface{}
+	Value    ValueWrapper
 }
 
 type RequestParameters struct {
@@ -99,6 +103,7 @@ type RPCServer struct {
 	//additional fields for chord implementation
 
 	chordNode *(chord.ChordNode)
+
 }
 
 //this struct methods will be exposed to client
@@ -141,10 +146,61 @@ func (configObject *ConfigType) ReadConfig(configFilePath string) error {
 
 /*****************************Memory Mapped Persitent FIle Operations using Bolt starts*******************************/
 
+/*
+Wraps the content and permission along with the different times
+*/
+func tripletValueWrapper(tripletValue interface{},permission string,timeToUpdate string) ValueWrapper {
+	var valueWrapper ValueWrapper
+	
+	valueWrapper.Content = tripletValue
+	if permission !=""{
+		valueWrapper.Permission = permission
+	}else{
+		valueWrapper.Permission = "RW"
+	}
+	if timeToUpdate==createdStr{
+		valueWrapper.Created = new(time.Time)
+		*(valueWrapper.Created) = time.Now()
+	}else if timeToUpdate==accessedStr{
+		valueWrapper.Accessed = new(time.Time)
+		*(valueWrapper.Accessed) = time.Now()
+	}else if timeToUpdate==modifiedStr{
+		valueWrapper.Modified = new(time.Time)
+		*(valueWrapper.Modified) = time.Now()
+	}
+
+	return valueWrapper
+}
+
+/*
+Unmarshal the dict3Value to check the permissions
+*/
+func (rpcServer * RPCServer)isWriteAllowed(dict3Value []byte) bool{
+	var valueWrapper ValueWrapper
+	
+	if err := json.Unmarshal(dict3Value,&valueWrapper); err!=nil{
+		rpcServer.logger.Println("In isWriteAllowed - Unmarshalling error")
+		return false
+	}
+
+	if valueWrapper.Permission=="R" || valueWrapper.Permission=="r" {
+		return false
+	}
+	
+	return true
+}
+
+
 func (rpcMethod *RPCMethod) insertOrUpdate(reqPar []interface{}) error {
 
 	var parameters []interface{}
 	parameters = reqPar
+
+
+	//added
+	var tripletValue interface{}
+	var permission string
+	//added
 
 	//Use dict3 struct to unmarshall
 	dict3 := Dict3{}
@@ -155,9 +211,58 @@ func (rpcMethod *RPCMethod) insertOrUpdate(reqPar []interface{}) error {
 		} else if k == 1 {
 			dict3.Relation = v.(string)
 		} else if k == 2 {
-			dict3.Value = v
+			//dict3.Value = v
+			//added
+			tripletValue = v
+		}else if k==3 {
+			permission = v.(string)
 		}
+		//added
+		
 	}
+	
+	//added
+	//Read value from db
+	var keyPresent bool
+	keyPresent = false
+	var dict3Value []byte
+	var bucket *(bolt.Bucket)
+	rpcMethod.rpcServer.boltDB.View(func(tx *bolt.Tx) error {
+		bucket = tx.Bucket([]byte(dict3.Key))
+		if bucket != nil {
+			dict3Value = bucket.Get([]byte(dict3.Relation))
+			if dict3Value != nil {
+				keyPresent = true
+
+			}
+		}
+
+		return nil
+	})
+
+	if keyPresent{
+		//check if request has arrived from lookup
+		//if yes wrap it with the right permission and accesstime
+		if permission == accessedStr {
+			if err := json.Unmarshal(dict3Value, &(dict3.Value)); err != nil {
+				
+				rpcMethod.rpcServer.logger.Println("Value Unmarshalling error ", err, " for id: ", dict3.Key, " ", dict3.Relation)
+				return nil
+			}
+
+			dict3.Value = tripletValueWrapper(tripletValue,dict3.Value.Permission,accessedStr)
+	
+		}else{
+			//check permission on dict3value and return if not allowed
+			if !rpcMethod.rpcServer.isWriteAllowed(dict3Value){
+				return nil
+			}
+			dict3.Value = tripletValueWrapper(tripletValue,permission,modifiedStr)
+		}
+	}else{
+		dict3.Value = tripletValueWrapper(tripletValue,permission,createdStr)
+	}
+	//added
 
 	//Marshal the value and store in db
 	valueByte, err := json.Marshal(dict3.Value)
@@ -165,6 +270,7 @@ func (rpcMethod *RPCMethod) insertOrUpdate(reqPar []interface{}) error {
 		rpcMethod.rpcServer.logger.Println(err)
 		return err
 	}
+	
 
 	//open db in update mode - insert or update
 
@@ -186,13 +292,17 @@ func (rpcMethod *RPCMethod) insertOrUpdate(reqPar []interface{}) error {
 
 }
 
-//func (rpcMethod *RPCMethod) insert(reqPar []interface{}, response *ResponseParameters) error {
 func (rpcMethod *RPCMethod) insert(reqPar []interface{}, response *ResponseParametersInsert) error {
 
 	//Unmarshal into array of interfaces
 	var parameters []interface{}
 	parameters = reqPar
 
+	//added
+	var tripletValue interface{}
+	var permission string
+	//added
+	
 	//Use dict3 struct to unmarshall
 	dict3 := Dict3{}
 	for k, v := range parameters {
@@ -202,9 +312,18 @@ func (rpcMethod *RPCMethod) insert(reqPar []interface{}, response *ResponseParam
 		} else if k == 1 {
 			dict3.Relation = v.(string)
 		} else if k == 2 {
-			dict3.Value = v
+			//dict3.Value = v
+			//added
+			tripletValue = v
+		}else if k==3 {
+			permission = v.(string)
 		}
+		//added
 	}
+	
+	//added
+	dict3.Value = tripletValueWrapper(tripletValue,permission,createdStr)
+	//added
 
 	//Marshal the value and store in db
 	valueByte, err := json.Marshal(dict3.Value)
@@ -304,6 +423,14 @@ func (rpcMethod *RPCMethod) delete(reqPar []interface{}) error {
 	//2. delete relation
 	//3. delete if bucket empty - delete bucket
 	if keyPresent {
+		
+		//added
+		//check permission on dict3value and return if not allowed
+		if !rpcMethod.rpcServer.isWriteAllowed(dict3Value){
+			return nil
+		}
+		//added
+		
 		rpcMethod.rpcServer.boltDB.Update(func(tx *bolt.Tx) error {
 
 			bucket = tx.Bucket([]byte(dict3.Key))
@@ -427,7 +554,19 @@ func (rpcMethod *RPCMethod) partialLookup(reqPar []interface{}, response *Respon
 				}
 				
 				
-				response.Result = append(response.Result,partialDict3)
+				response.Result = append(response.Result,partialDict3.Value.Content)
+				//added
+				//update access time for this lookup
+				var reqParToInsertOrUpdate []interface{}
+				reqParToInsertOrUpdate = make([]interface{},4)
+				reqParToInsertOrUpdate[0] = partialDict3.Key
+				reqParToInsertOrUpdate[1] = partialDict3.Relation
+				reqParToInsertOrUpdate[2] = partialDict3.Value.Content
+				//way to tell insert or update has come from lookup
+				reqParToInsertOrUpdate[3] = accessedStr
+				rpcMethod.insertOrUpdate(reqParToInsertOrUpdate)
+				//added
+
 				return nil
 			})
 			return nil
@@ -440,7 +579,7 @@ func (rpcMethod *RPCMethod) partialLookup(reqPar []interface{}, response *Respon
 			cursor = tx.Cursor()
 			//iterate over each bucket (key)	
 			for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
-		
+				
 				c := tx.Bucket(k).Cursor()
 
 				//search in the bucket(key) with the given relation as partial prefix 
@@ -456,16 +595,26 @@ func (rpcMethod *RPCMethod) partialLookup(reqPar []interface{}, response *Respon
 					partialDict3 := Dict3{}
 					partialDict3.Key = string(k)
 					partialDict3.Relation = string(rel)
-				if err := json.Unmarshal(v, &(partialDict3.Value)); err != nil {
+					if err := json.Unmarshal(v, &(partialDict3.Value)); err != nil {
 					
-					rpcMethod.rpcServer.logger.Println("Value Unmarshalling error ", err, " for id: ", partialDict3.Key, " ", partialDict3.Relation)
+						rpcMethod.rpcServer.logger.Println("Value Unmarshalling error ", err, " for id: ", partialDict3.Key, " ", partialDict3.Relation)
 					
-				}
+					}
 				
-				
-				response.Result = append(response.Result,partialDict3)
 					
-				}
+					response.Result = append(response.Result,partialDict3.Value.Content)
+					//added - we are making a call to insertOrUpdate within a view transaction - may fail
+					//update access time for this lookup
+					// var reqParToInsertOrUpdate []interface{}
+					// reqParToInsertOrUpdate = make([]interface{},4)
+					// reqParToInsertOrUpdate[0] = partialDict3.Key
+					// reqParToInsertOrUpdate[1] = partialDict3.Relation
+					// reqParToInsertOrUpdate[2] = partialDict3.Value.Content
+					// //way to tell insert or update has come from lookup
+					// reqParToInsertOrUpdate[3] = accessedStr
+					// rpcMethod.insertOrUpdate(reqParToInsertOrUpdate)
+					//added	
+				}//end for
 			}
 			
 			return nil
@@ -536,9 +685,23 @@ func (rpcMethod *RPCMethod) lookup(reqPar []interface{}, response *ResponseParam
 		response.Result = make([]interface{}, 3)
 		response.Result[0] = dict3.Key
 		response.Result[1] = dict3.Relation
-		response.Result[2] = dict3.Value
+		//response.Result[2] = dict3.Value
+		//added
+		response.Result[2] = dict3.Value.Content
+		//added
 		response.Error = nil
 
+		//added
+		//update access time for this lookup
+		var reqParToInsertOrUpdate []interface{}
+		reqParToInsertOrUpdate = make([]interface{},4)
+		reqParToInsertOrUpdate[0] = dict3.Key
+		reqParToInsertOrUpdate[1] = dict3.Relation
+		reqParToInsertOrUpdate[2] = dict3.Value.Content
+		//way to tell insert or update has come from lookup
+		reqParToInsertOrUpdate[3] = accessedStr
+		rpcMethod.insertOrUpdate(reqParToInsertOrUpdate)
+		//added
 	} else {
 		//if key value not found return false
 		rpcMethod.rpcServer.logger.Println("Value not found: ", dict3.Key, " ", dict3.Relation)
@@ -1811,7 +1974,8 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 		//GetSuccessorInfoForInputHashWrapper(key,relation)
 		// vvvvvvvvvvvvv  BEING WORKED BY SID vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
 		if key == "" {																		// if empty key
-			relationHash := hashing.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
+			//relationHash := hashing.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
+			relationHash := hashing.GetEndingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
 			// get relation hash
 			keyHash := uint32(0) 																	// set first key hash to 0
 			finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
