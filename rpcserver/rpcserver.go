@@ -2156,6 +2156,7 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 					break					// if msb is not keyHash, all relevant values were retrieved from this node
 				}else{
 					relationHash = lsb + uint32(1) 	// else increment lsb to get next relevant hash
+//TODO												// what happens if lsb is 1111 ?
 				}
 				finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
 				// concatenate
