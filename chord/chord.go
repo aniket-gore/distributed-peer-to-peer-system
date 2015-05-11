@@ -51,6 +51,9 @@ type ChordNode struct {
 	Logger *log.Logger
 	KeyHashLength int
 	RelationHashLength int
+	
+	//duration to delete
+	DurationToDelete time.Duration
 }
 
 func (chordNode *ChordNode) updateFtServerMapping(id uint32, serverInfo rpcclient.ServerInfo) {

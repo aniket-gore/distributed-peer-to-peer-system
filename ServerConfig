@@ -10,9 +10,9 @@
 	"loggerName": "mainNode.txt",
 	"keyHashLength": 2, 
 	"relationHashLength": 2,
-	"serverIDToContact":"server2",
+	"serverIDToContact":"server1",
 	"protocolToContact":"tcp",
 	"IpAddressToContact":"127.0.0.1",
-	"PortToContact":1236
-
+	"PortToContact":1235,
+	"DurationToDelete":"60s"
 }
