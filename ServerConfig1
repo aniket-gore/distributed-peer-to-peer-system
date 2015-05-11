@@ -13,6 +13,6 @@
 	"serverIDToContact":"mainserver",
 	"protocolToContact":"tcp",
 	"IpAddressToContact":"127.0.0.1",
-	"PortToContact":1234
-
+	"PortToContact":1234,
+	"DurationToDelete":"60s"
 }

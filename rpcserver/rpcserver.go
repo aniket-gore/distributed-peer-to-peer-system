@@ -30,7 +30,7 @@ type ValueWrapper struct{
 	Content interface{} `json:"content"`
 	Created * time.Time `json:"created,omitempty"`
 	Modified * time.Time `json:"modified,omitempty"`
-	Accessed * time.Time `json:"acessed,omitempty"`
+	Accessed * time.Time `json:"accessed,omitempty"`
 	Permission string `json:"permission,omitempty"`
 }
 
@@ -88,6 +88,8 @@ type ConfigType struct {
 	IpAddressToContact                  string                  `json: "IpAddressToContact"`
 	PortToContact                       int                     `json: "PortToContact"`
 	
+	//Duration to delete
+	DurationToDelete string `json:"DurationToDelete"`
 }
 
 //this struct object will manage the server
@@ -149,7 +151,7 @@ func (configObject *ConfigType) ReadConfig(configFilePath string) error {
 /*
 Wraps the content and permission along with the different times
 */
-func tripletValueWrapper(tripletValue interface{},permission string,timeToUpdate string) ValueWrapper {
+func tripletValueWrapper(tripletValue interface{},permission string,timeToUpdate string,inputValueWrapper ValueWrapper) ValueWrapper {
 	var valueWrapper ValueWrapper
 	
 	valueWrapper.Content = tripletValue
@@ -161,12 +163,22 @@ func tripletValueWrapper(tripletValue interface{},permission string,timeToUpdate
 	if timeToUpdate==createdStr{
 		valueWrapper.Created = new(time.Time)
 		*(valueWrapper.Created) = time.Now()
+
+		valueWrapper.Accessed =  inputValueWrapper.Accessed 
+		valueWrapper.Modified =  inputValueWrapper.Modified
 	}else if timeToUpdate==accessedStr{
 		valueWrapper.Accessed = new(time.Time)
 		*(valueWrapper.Accessed) = time.Now()
+
+		valueWrapper.Created =  inputValueWrapper.Created 
+		valueWrapper.Modified =  inputValueWrapper.Modified
+		
 	}else if timeToUpdate==modifiedStr{
 		valueWrapper.Modified = new(time.Time)
 		*(valueWrapper.Modified) = time.Now()
+
+		valueWrapper.Accessed =  inputValueWrapper.Accessed 
+		valueWrapper.Created =  inputValueWrapper.Created
 	}
 
 	return valueWrapper
@@ -243,24 +255,30 @@ func (rpcMethod *RPCMethod) insertOrUpdate(reqPar []interface{}) error {
 	if keyPresent{
 		//check if request has arrived from lookup
 		//if yes wrap it with the right permission and accesstime
-		if permission == accessedStr {
-			if err := json.Unmarshal(dict3Value, &(dict3.Value)); err != nil {
+		if err := json.Unmarshal(dict3Value, &(dict3.Value)); err != nil {
 				
-				rpcMethod.rpcServer.logger.Println("Value Unmarshalling error ", err, " for id: ", dict3.Key, " ", dict3.Relation)
-				return nil
-			}
+			rpcMethod.rpcServer.logger.Println("Value Unmarshalling error ", err, " for id: ", dict3.Key, " ", dict3.Relation)
+			return nil
+		}
+		if permission == accessedStr {
+			fmt.Println("Got insertorupdate request from lookup")
+			
 
-			dict3.Value = tripletValueWrapper(tripletValue,dict3.Value.Permission,accessedStr)
-	
+			dict3.Value = tripletValueWrapper(tripletValue,dict3.Value.Permission,accessedStr,dict3.Value)
+			fmt.Println(dict3.Value)
 		}else{
 			//check permission on dict3value and return if not allowed
 			if !rpcMethod.rpcServer.isWriteAllowed(dict3Value){
 				return nil
 			}
-			dict3.Value = tripletValueWrapper(tripletValue,permission,modifiedStr)
+			fmt.Println("Got insertorupdate request for existing key relation")
+			dict3.Value = tripletValueWrapper(tripletValue,permission,modifiedStr,dict3.Value)
+			fmt.Println(dict3.Value)
 		}
 	}else{
-		dict3.Value = tripletValueWrapper(tripletValue,permission,createdStr)
+		fmt.Println("Got insertorupdate request for new key relation")
+		dict3.Value = tripletValueWrapper(tripletValue,permission,createdStr,*(new(ValueWrapper)))
+		fmt.Println(dict3.Value)
 	}
 	//added
 
@@ -292,6 +310,90 @@ func (rpcMethod *RPCMethod) insertOrUpdate(reqPar []interface{}) error {
 
 }
 
+func (rpcMethod *RPCMethod) pureinsert(reqPar []interface{}, response *ResponseParametersInsert) error {
+
+	//Unmarshal into array of interfaces
+	var parameters []interface{}
+	parameters = reqPar
+
+	
+	//Use dict3 struct to unmarshall
+	dict3 := Dict3{}
+	for k, v := range parameters {
+		rpcMethod.rpcServer.logger.Println(k, v)
+		if k == 0 {
+			dict3.Key = v.(string)
+		} else if k == 1 {
+			dict3.Relation = v.(string)
+		} else if k == 2 {
+			//dict3.Value = v.(ValueWrapper)
+			valueWrapperBytes,_ := json.Marshal(v)
+			if err := json.Unmarshal(valueWrapperBytes,&(dict3.Value)); err!=nil{
+				rpcMethod.rpcServer.logger.Println(err)
+				return err
+			}
+
+		}
+	
+	}
+	
+
+	//Marshal the value and store in db
+	valueByte, err := json.Marshal(dict3.Value)
+	if err != nil {
+		rpcMethod.rpcServer.logger.Println(err)
+		return err
+	}
+
+	//open db in view mode
+	//check if key already present
+	//check if rel already present
+	//if both present return err
+	//if not open db in update mode and create
+
+	var keyPresent bool
+	keyPresent = false
+	rpcMethod.rpcServer.boltDB.View(func(tx *bolt.Tx) error {
+		//check if key present
+		b := tx.Bucket([]byte(dict3.Key))
+		if b != nil {
+			v := b.Get([]byte(dict3.Relation))
+			if v != nil {
+				keyPresent = true
+			}
+		}
+		return nil
+	})
+
+	//open db in update mode
+	if !keyPresent {
+		rpcMethod.rpcServer.boltDB.Update(func(tx *bolt.Tx) error {
+
+			b, err := tx.CreateBucketIfNotExists([]byte(dict3.Key))
+			if err != nil {
+				return err
+			}
+
+			b = tx.Bucket([]byte(dict3.Key))
+			if err = b.Put([]byte(dict3.Relation), valueByte); err != nil {
+				return err
+			}
+			return nil
+		})
+		response.Result = "true"
+		response.Error = nil
+
+	} else {
+		//return an error
+		response.Result = nil
+		response.Error = "Key Relation already exist"
+
+	}
+
+	return nil
+}
+
+
 func (rpcMethod *RPCMethod) insert(reqPar []interface{}, response *ResponseParametersInsert) error {
 
 	//Unmarshal into array of interfaces
@@ -322,7 +424,7 @@ func (rpcMethod *RPCMethod) insert(reqPar []interface{}, response *ResponseParam
 	}
 	
 	//added
-	dict3.Value = tripletValueWrapper(tripletValue,permission,createdStr)
+	dict3.Value = tripletValueWrapper(tripletValue,permission,createdStr,*(new(ValueWrapper)))
 	//added
 
 	//Marshal the value and store in db
@@ -435,15 +537,22 @@ func (rpcMethod *RPCMethod) delete(reqPar []interface{}) error {
 
 			bucket = tx.Bucket([]byte(dict3.Key))
 			bucket.Delete([]byte(dict3.Relation))
+			
+			return nil
+		})
+		//fix empty bucket issue
+		//delete bucket if empty
+		rpcMethod.rpcServer.boltDB.Update(func(tx *bolt.Tx) error {
+
 			var bucketStats bolt.BucketStats
 			bucketStats = tx.Bucket([]byte(dict3.Key)).Stats()
-
 			//if bucket empty delete bucket
 			if bucketStats.KeyN == 0 {
 				tx.DeleteBucket([]byte(dict3.Key))
 			}
 			return nil
 		})
+
 
 	}
 
@@ -748,7 +857,7 @@ func (rpcMethod *RPCMethod) PureInsert(jsonInput RequestParameters, jsonOutput *
 	
 		
 	//make the actual call on the target successor
-	if err := rpcMethod.insert(jsonInput.Params, response); err != nil {
+	if err := rpcMethod.pureinsert(jsonInput.Params, response); err != nil {
 		rpcMethod.rpcServer.logger.Println(err)
 		response.Result = nil
 		response.Error = 1
@@ -1528,6 +1637,13 @@ func (rpcServer *RPCServer) InitializeChordNode() {
 	rpcServer.chordNode.ToContactServerInfo.IpAddress = rpcServer.configObject.IpAddressToContact
 	rpcServer.chordNode.ToContactServerInfo.Port = rpcServer.configObject.PortToContact
 	
+	var err error
+	rpcServer.chordNode.DurationToDelete,err = time.ParseDuration(rpcServer.configObject.DurationToDelete)
+	if err !=nil{
+		fmt.Println("Error parsing time duration")
+		return
+	}
+	
 	rpcServer.chordNode.InitializeNode()
 	rpcServer.chordNode.RunBackgroundProcesses()
 
@@ -1993,9 +2109,9 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 
 			for {																			// do forever
 //TODO			//forwardRequest to successorInfo 											// forward partial query
-				msb = rpcMethod.rpcServer.chordNode.Id/uint32(rpcMethod.rpcServer.chordNode.RelationHashLength)
+				msb = successorInfo.Id / uint32(rpcMethod.rpcServer.chordNode.RelationHashLength)
 				// get most significant bits of chordNode Id, corresponding to key hash
-				lsb = rpcMethod.rpcServer.chordNode.Id
+				lsb = successorInfo.Id % (keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | uint32(0))
 				// get least significant bits of chordNode Id, corresponding to relation hash
 				if lsb < relationHash {
 					keyHash = msb			// only have to set the least significant bits to relationHash for next iter
@@ -2032,14 +2148,15 @@ func (rpcMethod * RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPa
 
 			for {																			// do forever
 //TODO			//forwardRequest to successorInfo 											// forward partial query
-				msb = rpcMethod.rpcServer.chordNode.Id/uint32(rpcMethod.rpcServer.chordNode.RelationHashLength)
+				msb = successorInfo.Id / uint32(rpcMethod.rpcServer.chordNode.RelationHashLength)
 				// get most significant bits of chordNode Id, corresponding to key hash
-				lsb = rpcMethod.rpcServer.chordNode.Id
+				lsb = successorInfo.Id % (keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | uint32(0))
 				// get least significant bits of chordNode Id, corresponding to relation hash
 				if msb != keyHash {
 					break					// if msb is not keyHash, all relevant values were retrieved from this node
 				}else{
 					relationHash = lsb + uint32(1) 	// else increment lsb to get next relevant hash
+//TODO												// what happens if lsb is 1111 ?
 				}
 				finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash 		
 				// concatenate
@@ -2252,6 +2369,216 @@ func (rpcServer * RPCServer)transferKeysToRequestingNode(chordNodeToSend chord.S
 		return nil
 	})
 
+}
+
+/*
+delete triplets that have not been accessed for a certain period of time
+request <-"{"method":"Purge","params":[]}"
+response <- "{"result":[true],"id":,"error":null }"
+*/
+func (rpcMethod * RPCMethod) Purge(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+
+	rpcMethod.rpcServer.logger.Println("In Function Purge")
+
+	//Initialize rpcserver
+	var err error
+	err, rpcMethod.rpcServer = GetRPCServerInstance()
+	var customError error
+	if err != nil {
+		customError = errors.New("Getting Server Instance error :" + err.Error())
+		rpcMethod.rpcServer.logger.Println(customError)
+		return customError
+	}
+
+	rpcMethod.rpcServer.makeDeletes()
+	
+	//if successor set to itself return nil - dont propagate the call
+	if rpcMethod.rpcServer.chordNode.FingerTable[1] == rpcMethod.rpcServer.chordNode.Id{
+		return nil
+	}
+
+	//propogate to successor
+	//give input the src id
+	parameter := rpcMethod.rpcServer.chordNode.Id	
+	
+	//create json message
+	jsonMessage := rpcclient.RequestParameters{}
+	jsonMessage.Method = "purgeWithSrcId";
+	jsonMessage.Params = make([]interface{},1)
+	jsonMessage.Params[0] = parameter
+	jsonBytes,err :=json.Marshal(jsonMessage)
+	if err!=nil{
+		rpcMethod.rpcServer.chordNode.Logger.Println(err)
+		return err
+	} 
+	rpcMethod.rpcServer.logger.Println("In Purge")
+	rpcMethod.rpcServer.logger.Println(string(jsonBytes))
+	
+	clientServerInfo,err := rpcMethod.rpcServer.chordNode.PrepareClientServerInfo(rpcMethod.rpcServer.chordNode.FingerTable[1])
+	if err==nil{
+		
+		client := &rpcclient.RPCClient{}
+		err, _ := client.RpcCall(clientServerInfo, string(jsonBytes))
+		
+		if err != nil {
+			rpcMethod.rpcServer.logger.Println(err)
+		}
+		
+	}else{
+		rpcMethod.rpcServer.logger.Println(err)
+	}
+	
+	
+	//response
+	jsonOutput.Result = make([]interface{}, 1)
+	jsonOutput.Result[0] = true
+
+	return nil
+}
+
+/*
+delete triplets that have not been accessed for a certain period of time
+request <-"{"method":"PurgeWithSrcId","params":[10]}"
+response <- "{"result":[true],"id":,"error":null }"
+*/
+func (rpcMethod * RPCMethod) PurgeWithSrcId(jsonInput RequestParameters, jsonOutput *ResponseParameters) error {
+
+	rpcMethod.rpcServer.logger.Println("In Function Purge")
+
+	//Initialize rpcserver
+	var err error
+	err, rpcMethod.rpcServer = GetRPCServerInstance()
+	var customError error
+	if err != nil {
+		customError = errors.New("Getting Server Instance error :" + err.Error())
+		rpcMethod.rpcServer.logger.Println(customError)
+		return customError
+	}
+
+	//stopping condition
+	if uint32(jsonInput.Params[0].(float64))==rpcMethod.rpcServer.chordNode.Id{
+		return nil
+	}
+	
+	//delete current node triplets using access time
+	rpcMethod.rpcServer.makeDeletes()
+	
+	
+	//if successor set to itself return nil
+	if rpcMethod.rpcServer.chordNode.FingerTable[1] == rpcMethod.rpcServer.chordNode.Id{
+		return nil
+	}
+
+	//propogate to successor the Purge and give input the src id 
+	parameter := uint32(jsonInput.Params[0].(float64))	
+	
+	//create json message
+	jsonMessage := rpcclient.RequestParameters{}
+	jsonMessage.Method = "purgeWithSrcId";
+	jsonMessage.Params = make([]interface{},1)
+	jsonMessage.Params[0] = parameter
+	jsonBytes,err :=json.Marshal(jsonMessage)
+	if err!=nil{
+		rpcMethod.rpcServer.logger.Println(err)
+		return err
+	} 
+	rpcMethod.rpcServer.logger.Println("In PurgeWithSrcId")
+	rpcMethod.rpcServer.logger.Println(string(jsonBytes))
+	
+	clientServerInfo,err := rpcMethod.rpcServer.chordNode.PrepareClientServerInfo(rpcMethod.rpcServer.chordNode.FingerTable[1])
+	if err==nil{
+		
+		client := &rpcclient.RPCClient{}
+		err, _ := client.RpcCall(clientServerInfo, string(jsonBytes))
+		
+		if err != nil {
+			rpcMethod.rpcServer.logger.Println(err)
+		}
+		
+	}else{
+		rpcMethod.rpcServer.logger.Println(err)
+	}
+	
+	//response
+	jsonOutput.Result = make([]interface{}, 1)
+	jsonOutput.Result[0] = true
+
+	return nil
+}
+
+
+/*
+Called in Purge - triplets are deleted if difference between access time and current time  is more than user specified time 
+*/
+func (rpcServer * RPCServer)makeDeletes(){
+
+
+	//open a read transaction
+	rpcServer.boltDB.Update(func(tx *bolt.Tx) error {
+		var cursor *bolt.Cursor
+		cursor = tx.Cursor()
+		
+		var bucket *bolt.Bucket
+
+		//traverse through all keys
+		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
+			bucket = tx.Bucket(k)
+			
+			//traverse through all relation and value pairs
+			bucket.ForEach(func(relation, value []byte) error {
+				
+				//unmarshal the value
+				var valueWrapper ValueWrapper
+				if err := json.Unmarshal(value,&valueWrapper);err !=nil{
+					rpcServer.logger.Println(err)
+					return err
+				}
+				
+				//check permission as well
+				if valueWrapper.Permission=="R"{
+					return nil
+				}
+				//if last accessed time less than user specified duration then skip delete
+				if valueWrapper.Accessed!=nil && time.Since(*(valueWrapper.Accessed)) < rpcServer.chordNode.DurationToDelete{
+					return nil
+				}
+				//if  value hasnt been accessed yet dont delete
+				if valueWrapper.Accessed==nil{
+					return nil
+				}
+				//delete the relation value pair
+				if err := bucket.Delete(relation); err!=nil{
+					rpcServer.logger.Println(err)
+					
+				}
+				
+				return nil
+			})//end inner function
+		}//end for
+		return nil
+	})
+	
+	//delete bucket if empty
+	rpcServer.boltDB.Update(func(tx *bolt.Tx) error {
+		var cursor *bolt.Cursor
+		cursor = tx.Cursor()
+		
+		var bucket *bolt.Bucket
+		
+		//traverse through all keys
+		for k, _ := cursor.First(); k != nil; k, _ = cursor.Next() {
+			bucket = tx.Bucket(k)
+			
+			var bucketStats bolt.BucketStats
+			bucketStats = bucket.Stats()
+			//if bucket empty delete bucket
+			if bucketStats.KeyN == 0 {
+				tx.DeleteBucket([]byte(k))
+			}
+		}
+		return nil
+	})
+	
 }
 
 /*****************************Chord related functions**************************************************/
