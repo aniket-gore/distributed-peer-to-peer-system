@@ -2532,6 +2532,11 @@ func (rpcServer * RPCServer)makeDeletes(){
 					rpcServer.logger.Println(err)
 					return err
 				}
+				
+				//check permission as well
+				if valueWrapper.Permission=="R"{
+					return nil
+				}
 				//if last accessed time less than user specified duration then skip delete
 				if valueWrapper.Accessed!=nil && time.Since(*(valueWrapper.Accessed)) < rpcServer.chordNode.DurationToDelete{
 					return nil
