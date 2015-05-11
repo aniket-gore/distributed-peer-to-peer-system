@@ -30,6 +30,9 @@ type ChordNode struct {
 
 	//exposed
 	MyServerInfo rpcclient.ServerInfo
+	
+	ToContactServerInfo rpcclient.ServerInfo
+	
 	MValue       int
 	FirstNode    int
 
@@ -48,6 +51,9 @@ type ChordNode struct {
 	Logger *log.Logger
 	KeyHashLength int
 	RelationHashLength int
+	
+	//duration to delete
+	DurationToDelete time.Duration
 }
 
 func (chordNode *ChordNode) updateFtServerMapping(id uint32, serverInfo rpcclient.ServerInfo) {
@@ -95,8 +101,8 @@ func (chordNode *ChordNode) InitializeNode() {
 
 	if chordNode.FirstNode != 1 {
 
-		chordNode.join(getDefaultServerInfo())
-
+		//chordNode.join(getDefaultServerInfo())
+		chordNode.join()
 	} else {
 
 		chordNode.Logger.Println("Chord InitializeNode : Assigned Successor : " + fmt.Sprint(chordNode.Id))
@@ -114,16 +120,17 @@ func getDefaultServerInfo() rpcclient.ServerInfo {
 	return serverInfo
 }
 
-func (chordNode *ChordNode) join(serverInfo rpcclient.ServerInfo) {
+//func (chordNode *ChordNode) join(serverInfo rpcclient.ServerInfo) {
+func (chordNode *ChordNode) join() {
 
 	chordNode.Logger.Println("Chord : In Join")
 	jsonMessage := "{\"method\":\"findSuccessor\",\"params\":[" + fmt.Sprint(chordNode.Id) + "]}"
 
 	clientServerInfo := rpcclient.ServerInfo{}
-	clientServerInfo.ServerID = serverInfo.ServerID
-	clientServerInfo.Protocol = serverInfo.Protocol
-	clientServerInfo.IpAddress = serverInfo.IpAddress
-	clientServerInfo.Port = serverInfo.Port
+	clientServerInfo.ServerID = chordNode.ToContactServerInfo.ServerID
+	clientServerInfo.Protocol = chordNode.ToContactServerInfo.Protocol
+	clientServerInfo.IpAddress = chordNode.ToContactServerInfo.IpAddress
+	clientServerInfo.Port = chordNode.ToContactServerInfo.Port
 
 	client := &rpcclient.RPCClient{}
 	err, response := client.RpcCall(clientServerInfo, jsonMessage)
@@ -153,6 +160,47 @@ func (chordNode *ChordNode) join(serverInfo rpcclient.ServerInfo) {
 		}
 	}
 	chordNode.FtServerMapping[chordNode.Successor] = resultServerInfo
+
+	//tell successor to transfer keys
+	//create paramter to be sent - successor
+	parameter := ServerInfoWithID{}
+	parameter.Id = chordNode.Id
+	parameter.ServerInfo = chordNode.MyServerInfo
+		
+	//create json message
+	jsonMessageHolder := rpcclient.RequestParameters{}
+	jsonMessageHolder.Method = "TransferKeysAfterJoin";
+	jsonMessageHolder.Params = make([]interface{},1)
+	jsonMessageHolder.Params[0] = parameter
+	jsonBytes,err :=json.Marshal(jsonMessageHolder)
+	if err!=nil{
+		chordNode.Logger.Println(err)
+		return
+	} 
+               
+	chordNode.Logger.Println(string(jsonBytes))
+	
+	//prepare server info
+
+	clientServerInfo.ServerID = chordNode.FtServerMapping[chordNode.Successor].ServerID
+	clientServerInfo.Protocol = chordNode.FtServerMapping[chordNode.Successor].Protocol
+	clientServerInfo.IpAddress = chordNode.FtServerMapping[chordNode.Successor].IpAddress
+	clientServerInfo.Port = chordNode.FtServerMapping[chordNode.Successor].Port
+	
+	chordNode.Logger.Println(clientServerInfo)
+		
+	if err==nil{
+		
+		client := &rpcclient.RPCClient{}
+		err, _ := client.RpcCall(clientServerInfo, string(jsonBytes))
+		
+		if err != nil {
+			chordNode.Logger.Println(err)
+		}
+		
+	}else{
+		chordNode.Logger.Println(err)
+	}
 }
 
 func getSHAID(ipAddress string, port int, mBits int) uint32{
@@ -332,6 +380,9 @@ func (chordNode *ChordNode) checkPredecessor() {
 
 	if err != nil {
 		chordNode.Logger.Println(err)
+		chordNode.Logger.Println(response)
+		chordNode.SetPredecessor(true, 0)
+	
 		return
 	}
 
@@ -386,7 +437,7 @@ func (chordNode *ChordNode) NotifyShutDownToRing(){
 			chordNode.Logger.Println(err)
 			return
 		} 
-               
+		chordNode.Logger.Println("In NotifyShutDownToRing")
 		chordNode.Logger.Println(string(jsonBytes))
 	
 		//prepare server info
@@ -421,7 +472,7 @@ func (chordNode *ChordNode) NotifyShutDownToRing(){
 			chordNode.Logger.Println(err)
 			return
 		} 
-               
+		chordNode.Logger.Println("In NotifyShutDownToRing")
 		chordNode.Logger.Println(string(jsonBytes))
 	
 		clientServerInfo,err = chordNode.PrepareClientServerInfo(chordNode.Predecessor)

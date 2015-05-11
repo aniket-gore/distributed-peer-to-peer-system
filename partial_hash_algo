@@ -11,7 +11,7 @@ pl - unexposed lookup called by PL - that will search the db given a key or a re
 
 if full lookup forward it to another L
 l will be called 
-else if partial forward i to another PL
+else if partial forward it to another PL
 pl will be caled 
 
 

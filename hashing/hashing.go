@@ -1,7 +1,6 @@
 package hashing
 
 import "crypto/sha1"
-import "fmt"
 import "math"
 /*
 func main() {
@@ -77,9 +76,9 @@ func getEndingMBits(allHash []byte,numberOfBits int) uint32{
 	//get remaining bits
 	
 	temp_uint = uint32(allHash[19-index])
-	fmt.Println("Byte to be partially hashed ", temp_uint)
+	//fmt.Println("Byte to be partially hashed ", temp_uint)
 	mask := uint32(math.Pow(2,float64(remainingBits)) - 1)
-	fmt.Println("Mask created ", mask)
+	//fmt.Println("Mask created ", mask)
 
 	temp_uint &= mask
 	
@@ -129,9 +128,9 @@ func getStartingMBits(allHash []byte,numberOfBits int) uint32{
 	//get remaining bits
 	
 	temp_uint = uint32(allHash[index])
-	fmt.Println("Byte to be partially hashed ", temp_uint)
+	//fmt.Println("Byte to be partially hashed ", temp_uint)
 	mask := uint32(math.Pow(2,float64(remainingBits)) - 1)
-	fmt.Println("Mask created ", mask)
+	//fmt.Println("Mask created ", mask)
 
 	temp_uint &= mask
 	
