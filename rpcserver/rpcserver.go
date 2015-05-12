@@ -2321,7 +2321,7 @@ func (rpcMethod *RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPar
 
 		//atul
 
-		response.Result = make([]interface{}, 1, 10)
+		response.Result = make([]interface{}, 0, 10)
 		//atul
 		if key == "" { // if empty key
 			relationHash := hashing.GetStartingBits(relation, rpcMethod.rpcServer.chordNode.RelationHashLength)
@@ -2345,9 +2345,10 @@ func (rpcMethod *RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPar
 				//forwardRequest to successorInfo
 				//***************atul*****forwarding request and merge results********
 				responseFromSuccessor := rpcMethod.getPartialResultsFromSuccessorInfo(jsonInput, successorInfo)
-				mergedResponse := append(responseFromSuccessor.Result, response.Result...)
-				response.Result = mergedResponse
-
+				if len(responseFromSuccessor.Result)!=0{
+					mergedResponse := append(responseFromSuccessor.Result, response.Result...)
+					response.Result = mergedResponse
+				}
 				//***************atul*****forwarding request********
 
 				// forward partial query
@@ -2395,8 +2396,12 @@ func (rpcMethod *RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPar
 				//***************atul*****forwarding request********
 
 				responseFromSuccessor := rpcMethod.getPartialResultsFromSuccessorInfo(jsonInput, successorInfo)
-				mergedResponse := append(responseFromSuccessor.Result, response.Result...)
-				response.Result = mergedResponse
+				
+				if len(responseFromSuccessor.Result) !=0{
+			
+					mergedResponse := append(responseFromSuccessor.Result, response.Result...)
+					response.Result = mergedResponse
+				}
 				//***************atul*****forwarding request********
 
 				// forward partial query
