@@ -11,6 +11,7 @@ import (
 	"github.com/boltdb/bolt"
 	"io/ioutil"
 	"log"
+	"math"
 	"net"
 	"net/rpc"
 	"net/rpc/jsonrpc"
@@ -2209,8 +2210,8 @@ func (rpcMethod *RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPar
 		response.Result = make([]interface{}, 1, 10)
 		//atul
 		if key == "" {																		// if empty key
-			//relationHash := hashing.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
-			relationHash := hashing.GetEndingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
+			relationHash := hashing.GetStartingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
+			// relationHash := hashing.GetEndingBits(relation,rpcMethod.rpcServer.chordNode.RelationHashLength)	
 			// get relation hash
 			keyHash := uint32(0) // set first key hash to 0
 			finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash
@@ -2239,16 +2240,17 @@ func (rpcMethod *RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPar
 				//***************atul*****forwarding request********
 
 				// forward partial query
-				msb = successorInfo.Id / uint32(rpcMethod.rpcServer.chordNode.RelationHashLength)
+				msb = successorInfo.Id / uint32(math.Pow(2, float64(rpcMethod.rpcServer.chordNode.RelationHashLength)))
 				// get most significant bits of chordNode Id, corresponding to key hash
-				lsb = successorInfo.Id % (keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | uint32(0))
+				// lsb = successorInfo.Id % (keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | uint32(0))
+				lsb = successorInfo.Id % uint32(math.Pow(2, float64(rpcMethod.rpcServer.chordNode.RelationHashLength)))
 				// get least significant bits of chordNode Id, corresponding to relation hash
 				if lsb < relationHash {
 					keyHash = msb // only have to set the least significant bits to relationHash for next iter
 				} else {
 					keyHash = msb + uint32(1) // if greater than or equal, have to increment mostSignificant
-				}
-				finalChordID := keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash
+				}				
+				finalChordID = keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | relationHash
 				// concatenate
 				successorInfo, err = rpcMethod.rpcServer.chordNode.GetSuccessorInfoForInputHash(finalChordID)
 				if err != nil {
@@ -2287,9 +2289,10 @@ func (rpcMethod *RPCMethod) checkIfPartialAndForwardRequest(jsonInput RequestPar
 				//***************atul*****forwarding request********
 
 				// forward partial query
-				msb = successorInfo.Id / uint32(rpcMethod.rpcServer.chordNode.RelationHashLength)
+				msb = successorInfo.Id / uint32(math.Pow(2, float64(rpcMethod.rpcServer.chordNode.RelationHashLength)))
 				// get most significant bits of chordNode Id, corresponding to key hash
-				lsb = successorInfo.Id % (keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | uint32(0))
+				// lsb = successorInfo.Id % (keyHash<<uint(rpcMethod.rpcServer.chordNode.RelationHashLength) | uint32(0))
+				lsb = successorInfo.Id % uint32(math.Pow(2, float64(rpcMethod.rpcServer.chordNode.RelationHashLength)))
 				// get least significant bits of chordNode Id, corresponding to relation hash
 				if msb != keyHash {
 					break // if msb is not keyHash, all relevant values were retrieved from this node

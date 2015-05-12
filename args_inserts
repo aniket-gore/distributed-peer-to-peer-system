@@ -1,0 +1,5 @@
+{"method":"Insert","params":["keyA","relationA",{"a":1,"b":1}]}
+{"method":"insert","params":["keyA","relationB",{"a":1,"b":2}]}
+{"method":"insert","params":["keyB","relationA",{"a":2,"b":1}]}
+{"method":"insert","params":["keyB","relationB",{"a":2,"b":2}]}
+{"method":"insert","params":["keyAB","relationAB",{"a":12,"b":12}]}

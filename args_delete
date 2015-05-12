@@ -1,1 +1,4 @@
 {"method":"delete","params":["keyA","relationB"],"id":null}
+{"method":"delete","params":["keyB","relationA"],"id":null}
+{"method":"delete","params":["keyB","relationB"],"id":null}
+{"method":"delete","params":["keyAB","relationAB"],"id":null}
