@@ -13,6 +13,7 @@
 	"serverIDToContact":"server1",
 	"protocolToContact":"tcp",
 	"IpAddressToContact":"127.0.0.1",
-	"PortToContact":1235
+	"PortToContact":1235,
+	"DurationToDelete":"60s"
 
 }
