@@ -222,8 +222,23 @@ func (chordNode ChordNode) ClosestPrecedingNode(inputId uint32) uint32 {
 	chordNode.Logger.Println("Chord : In ClosestPrecedingNode")
 	for i := chordNode.MValue; i > 0; i-- {
 		//finger[i] ∈ (n, id)
-		if chordNode.FingerTable[i] > chordNode.Id && chordNode.FingerTable[i] < inputId && chordNode.FingerTable[i] != 0 {
+		// if chordNode.FingerTable[i] > chordNode.Id && chordNode.FingerTable[i] < inputId && chordNode.FingerTable[i] != 0 {
+		// 	return chordNode.FingerTable[i]
+		// }
+		//FIX 
+		
+		//1.fingertable entry < current Id 
+		if chordNode.FingerTable[i] < chordNode.Id && (chordNode.FingerTable[i]< inputId && inputId < chordNode.Id){
 			return chordNode.FingerTable[i]
+		}
+		//2.fingertable entry > current Id  - there are 2 conditions
+		//a.inputId<currentId
+		//b.inputId > currentId
+		if chordNode.FingerTable[i] > chordNode.Id {
+			if inputId < chordNode.Id || (inputId > chordNode.Id &&  inputId > chordNode.FingerTable[i]) {
+				return chordNode.FingerTable[i]
+			}
+		
 		}
 	}
 
